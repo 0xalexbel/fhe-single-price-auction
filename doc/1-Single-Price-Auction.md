@@ -46,41 +46,41 @@ Next: [FHE Precomputations](./2-FHE-Precomputations.md)
 ### 1.3. Equivalence Class of a Price
 - Let $S_p$ denote the **set of bidders** who bid at price $p$. This is formally defined as the **equivalence class** of $p$:
   
-  ```math
-  S_p = \{ i \mid p_i = p, \, i \in I_N \}
-  ```
+```math
+S_p = \{ i \mid p_i = p, \, i \in I_N \}
+```
 
 ### 1.4. Total Quantity Bid at a Price
 - Let $Q_p$ denote the **total quantity of tokens bid** at price $p$. It is defined as:
   
-  ```math
-  Q_p = \sum_{i \in S_p} q_i
-  ```
+```math
+Q_p = \sum_{i \in S_p} q_i
+```
 
 ### 1.5. Set of Distinct Bid Prices
 - Let $\mathcal{P}_{bids}$ denote the **set of distinct prices** bid in the auction (i.e., prices with one or more bidders). Formally:
   
-  ```math
-  \mathcal{P}_{bids} = \{ p \mid \text{Card}(S_p) > 0 \}
-  ```
+```math
+\mathcal{P}_{bids} = \{ p \mid \text{Card}(S_p) > 0 \}
+```
 
 - Let $K = \text{Card}(\mathcal{P}_{bids})$ denote the number of distinct bid prices in the auction.
 
 - Let $\mathcal{P}_{bids}$ be represented as a **sorted list** of distinct prices in **decreasing order**:
   
-  ```math
-  \mathcal{P}_{bids} = \{ p_{1}^{(b)}, p_{2}^{(b)}, \dots, p_{K}^{(b)} \} \quad \text{where} \quad p_{1}^{(b)} > p_{2}^{(b)} > \dots > p_{K}^{(b)}
-  ```
+```math
+\mathcal{P}_{bids} = \{ p_{1}^{(b)}, p_{2}^{(b)}, \dots, p_{K}^{(b)} \} \quad \text{where} \quad p_{1}^{(b)} > p_{2}^{(b)} > \dots > p_{K}^{(b)}
+```
 
 ### 1.6. Cumulative Quantity of Tokens
 - Let $C_k$ denote the **cumulative quantity of tokens bid** up to price $p_k^{(b)}$. It is defined recursively as:
   
-  ```math
-  \begin{split}
-  C_0 &= 0, \\
-  C_k &= \sum_{i = 1}^{k} Q_{p_i^{(b)}} \quad \text{for} \ k \geq 1
-  \end{split}
-  ```
+```math
+\begin{split}
+C_0 &= 0, \\
+C_k &= \sum_{i = 1}^{k} Q_{p_i^{(b)}} \quad \text{for} \ k \geq 1
+\end{split}
+```
 
 ## 2. Auction
 
@@ -99,10 +99,10 @@ p_i = 0 \text{ and } q_i = 0, \quad &\text{if the bid is invalid.}
 ### 2.2. Uniform Price
 - In a **uniform price auction**, the **uniform price** $p_u^{(b)}$ is the smallest price such that the cumulative quantity of tokens bid satisfies the total sold quantity $Q$. Formally:
   
-  ```math
-  p_{u}^{(b)} \ \text{is the uniform price such that} \ 1 \leq u \leq K \ \text{ and } \
-  C_{u-1} < Q \leq C_{u}
-  ```
+```math
+p_{u}^{(b)} \ \text{is the uniform price such that} \ 1 \leq u \leq K \ \text{ and } \
+C_{u-1} < Q \leq C_{u}
+```
 
 ### 2.3 Allocation
 
@@ -160,18 +160,20 @@ The final quantity allocation is performed according to the bid order induced by
 At the start of the auction, each bidder $B_i$ is assigned a **unique registration value** $id_i$ that reflects the order in which they placed their bid. This value can be represented by a **register ID** or **timestamp**, ensuring each bidder has a unique and comparable placement value. The following properties hold for $id_i$:
 
 1. **Uniqueness:**  
-   For any two bidders $B_i$ and $B_j$:
-   ```math
-   id_i = id_j \iff i = j
-   ```
-   This ensures that each bidder has a unique registration value.
+  For any two bidders $B_i$ and $B_j$:
+
+```math
+id_i = id_j \iff i = j
+```
+
+  This ensures that each bidder has a unique registration value.
 
 2. **Descending Order:**  
    The registration values $id_i$ are assigned such that:
    
-   ```math
-   id_i > id_j \iff i < j
-   ```
+```math
+id_i > id_j \iff i < j
+```
    
    This means that bidder $B_1$ placed their bid first, and bidder $B_N$ placed their bid last.
 
