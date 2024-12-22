@@ -39,9 +39,9 @@ Next: [FHE Precomputations](./2-FHE-Precomputations.md)
 
 - Let $\mathcal{P}_{all}$ denote the **set of all bid prices** in the auction, including repeated bids at the same price. Formally:
   
-  ```math
-  \mathcal{P}_{all} = \{ p_i \mid i \in I_N \}
-  ```
+```math
+\mathcal{P}_{all} = \{ p_i \mid i \in I_N \}
+```
 
 ### 1.3. Equivalence Class of a Price
 - Let $S_p$ denote the **set of bidders** who bid at price $p$. This is formally defined as the **equivalence class** of $p$:
