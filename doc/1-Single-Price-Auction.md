@@ -30,7 +30,7 @@ Next: [FHE Precomputations](./2-FHE-Precomputations.md)
 
 - Let $I_N = \lbrace, 2, 3, \dots, N\rbrace$ denote the **index set** of bidders. We refer to $I_N$ as the set of all bidder indices.
 
-- Let $\mathcal{B} = \{ B_1, B_2, B_3, \dots, B_N \}$ denote the **bidder set**, which represents all participants in the auction. Each $B_i$ corresponds to the $i$-th bidder.
+- Let $\mathcal{B} = \lbrace B_1, B_2, B_3, \dots, B_N \rbrace$ denote the **bidder set**, which represents all participants in the auction. Each $B_i$ corresponds to the $i$-th bidder.
 
 ### 1.2. Bid Definitions
 - Let $q_i$ denote the **quantity of tokens** that bidder $B_i$ wishes to purchase.
@@ -40,14 +40,14 @@ Next: [FHE Precomputations](./2-FHE-Precomputations.md)
 - Let $\mathcal{P}_{all}$ denote the **set of all bid prices** in the auction, including repeated bids at the same price. Formally:
   
 ```math
-\mathcal{P}_{all} = \{ p_i \mid i \in I_N \}
+\mathcal{P}_{all} = \lbrace p_i \mid i \in I_N \rbrace
 ```
 
 ### 1.3. Equivalence Class of a Price
 - Let $S_p$ denote the **set of bidders** who bid at price $p$. This is formally defined as the **equivalence class** of $p$:
   
 ```math
-S_p = \{ i \mid p_i = p, \, i \in I_N \}
+S_p = \lbrace i \mid p_i = p, \, i \in I_N \rbrace
 ```
 
 ### 1.4. Total Quantity Bid at a Price
@@ -61,7 +61,7 @@ Q_p = \sum_{i \in S_p} q_i
 - Let $\mathcal{P}_{bids}$ denote the **set of distinct prices** bid in the auction (i.e., prices with one or more bidders). Formally:
   
 ```math
-\mathcal{P}_{bids} = \{ p \mid \text{Card}(S_p) > 0 \}
+\mathcal{P}_{bids} = \lbrace p \mid \text{Card}(S_p) > 0 \rbrace
 ```
 
 - Let $K = \text{Card}(\mathcal{P}_{bids})$ denote the number of distinct bid prices in the auction.
@@ -69,7 +69,7 @@ Q_p = \sum_{i \in S_p} q_i
 - Let $\mathcal{P}_{bids}$ be represented as a **sorted list** of distinct prices in **decreasing order**:
   
 ```math
-\mathcal{P}_{bids} = \{ p_{1}^{(b)}, p_{2}^{(b)}, \dots, p_{K}^{(b)} \} \quad \text{where} \quad p_{1}^{(b)} > p_{2}^{(b)} > \dots > p_{K}^{(b)}
+\mathcal{P}_{bids} = \lbrace p_{1}^{(b)}, p_{2}^{(b)}, \dots, p_{K}^{(b)} \rbrace \quad \text{where} \quad p_{1}^{(b)} > p_{2}^{(b)} > \dots > p_{K}^{(b)}
 ```
 
 ### 1.6. Cumulative Quantity of Tokens
