@@ -26,7 +26,7 @@ Next: [FHE Precomputations](./2-FHE-Precomputations.md)
 ## 1. Definitions
 
 ### 1.1. Bidder Setup
-- Let $B_i$ denote the $i$-th bidder participating in a single-price auction with $N$ bidders, where $i \in \{1, 2, 3, \dots, N\}$.
+- Let $B_i$ denote the $i$-th bidder participating in a single-price auction with $N$ bidders, where $i \in \left{1, 2, 3, \dots, N \right}$.
 
 - Let $I_N = \{1, 2, 3, \dots, N\}$ denote the **index set** of bidders. We refer to $I_N$ as the set of all bidder indices.
 
