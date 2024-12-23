@@ -1,0 +1,177 @@
+\section{FHE auction}
+
+% =============================================================================
+% Cumulative quantity vector and validity vectory
+% =============================================================================
+
+\subsection{Cumulative quantity vector $\mathbf{c_{rank}}$ and validity vectory $\mathbf{1_{valid}}$} 
+
+\subsubsection{Definitions}
+\begin{itemize}
+\item Let $\mathbf{c_{rank}}[k]$, where $k \in \{0, 1, 2, \dots, N\}$, denote the cumulative quantity of tokens bid by the top $k$-th highest-ranked bidders when the auction concludes. Specifically, it is given by:
+\begin{equation*}
+    \mathbf{c_{rank}}[k] = 
+    \begin{cases}
+        0 \quad &\text{if } k = 0
+        \\
+        \sum_{i=1}^{k} \mathbf{q_{rank}}[i] \quad &\text{if } k > 0
+    \end{cases}
+\end{equation*}
+
+\item Let $\mathbf{1_{valid}}[k]$, where $k \in \{1, 2, \dots, N\}$, denote the binary valid indicator for the cumulative bid quantity, defined as follows:
+\begin{equation*}
+    \mathbf{1_{valid}}[k] = 
+    \begin{cases}
+        1 \quad & \text{if } \ \mathbf{c_{rank}}[k-1] < Q \\
+        0 \quad & \text{otherwise}
+    \end{cases}
+\end{equation*}
+Here:
+\begin{itemize}
+    \item[--] $Q$ denotes the total offered quantity of tokens.
+    \item[--] $\mathbf{1_{valid}}[k] = 1$ indicates that the cumulative bid quantity up to the $(k-1)$-th rank is \textbf{valid} meaning there are still tokens left to be distributed.
+    \item[--] $\mathbf{1_{valid}}[k] = 0$ indicates that an overflow occurred at rank $k-1$, so no tokens remain to distribute at rank $k$.
+\end{itemize}
+\end{itemize}
+
+\subsubsection{FHE cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c| }
+    \hline    
+    Operations & $\mathbf{c_{rank}}$ & $\mathbf{1_{valid}}$ \\ 
+    \hline
+    fheAdd(U256) & $N-1$ & $0$  \\
+    fheLt(U256)  & $0$ & $N$    \\
+    \hline
+    \hline
+    FHE Units    & $10(N-1)$ & $9N$ \\
+    \hline
+\end{tabular}
+
+% =============================================================================
+% Final quantity vector
+% =============================================================================
+
+\subsection{Final Quantity Vector $\mathbf{q_{rank}^{*}}$}
+
+\subsubsection{Definition}
+Let $\mathbf{q_{rank}^{*}} = (\mathbf{q_{rank}^{*}}[k])_{1 \le k \le N}$ denote the vector whose $k$-th entry represents the maximum theoretical cumulative quantity of tokens won by all the $k$-th highest-ranked bidders upon completion of the auction.
+
+\begin{equation*}
+    \mathbf{q_{rank}^{*}}[k] = 
+    \begin{cases}
+        \mathbf{q_{rank}}[k] \quad & \text{if } \ \mathbf{1_{valid}}[k] \\
+        0 \quad & \text{otherwise }
+    \end{cases}
+\end{equation*}
+
+\subsubsection{Case with unique rankings}
+When $>$ produces a set of bidders with unique rankings (i.e. no ties), the value of $\mathbf{q_{rank}^{*}}[k]$ must be clamped to $Q - \mathbf{c_{rank}}[k-1]$ and the above formula is modified as follows:
+
+\begin{equation*}
+    \mathbf{q_{rank}^{*}}[k] = 
+    \begin{cases}
+        \min(\mathbf{q_{rank}}[k], \ Q - \mathbf{c_{rank}}[k-1]) \quad & \text{if } \ \mathbf{1_{valid}}[k] \\
+        0 \quad & \text{otherwise }
+    \end{cases}
+\end{equation*}
+
+Here:
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--]The condition $\text{if } \ \mathbf{1_{valid}}[k]$ ensures that no arithmetic overflow occurs.
+    \item[--]In case of unique rankings, $\mathbf{q_{rank}^{*}}[k]$ represents the \textbf{final quantity} of tokens won by the bidder ranked in the $k$-th position. 
+\end{itemize}
+
+\subsubsection{FHE cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c| }
+    \hline    
+    Operations & $\mathbf{q_{rank}^{*}}$ (unique) & $\mathbf{q_{rank}^{*}}$ (ties) \\ 
+    \hline
+    fheMin(U256)         & $N$ & $0$  \\
+    fheSub(U256)         & $N$ & $0$  \\
+    fheIfThenElse(U256)  & $N$ & $N$  \\
+    \hline
+    \hline
+    FHE Units            & $25N$ & $4N$ \\
+    \hline
+\end{tabular}
+
+\subsubsection{Solidity sample code}
+
+\begin{lstlisting}[language=Solidity]
+    // If bidders can have identical rankings (i.e., ties exist)
+    function qRankStarWithTies(uint16 k) returns(euint256) {
+        return TFHE.ifThenElse(valid(k), qRank(k), TFHE.asEuint256(0));
+    }
+\end{lstlisting}
+
+\begin{lstlisting}[language=Solidity]
+    // If bidders have unique rankings (i.e., there are no ties)
+    function qRankStarUnique(uint16 k) returns(euint256) {
+        euint256 q_max = TFHE.sub(Q, crank(k-1));
+        euint256 q_clamped = TFHE.min(qRank(k), q_max);
+        return TFHE.ifThenElse(valid(k), q_clamped, TFHE.asEuint256(0));
+    }    
+\end{lstlisting}
+
+% =============================================================================
+% Final uniform price
+% =============================================================================
+
+\subsection{Final Uniform Price $p_{u}^{(b)}$}
+
+\subsubsection{Definition}
+$p_{u}^{(b)}$, the final uniform price for each token sold when the auction concludes, is determined by the following recurrence relation:
+\begin{equation*}
+    \forall k \in \{0,1,2, \dots, N\} \quad p_{k}^{*} = 
+    \begin{cases}
+        0 &\text{if} \quad k = 0
+        \\
+        \mathbf{p_{rank}}[k] \quad &\text{if} \quad \mathbf{1_{valid}}[k] \ \text{ and } \ k > 0
+        \\
+        p_{k-1}^{*} \quad &\text{otherwise} \\
+    \end{cases}
+\end{equation*}
+
+\begin{equation*}
+    \text{final uniform price} = p_{u}^{(b)} = p_{N}^{*}
+\end{equation*}
+
+The final uniform price value can interpreted as follows:
+\begin{equation*}
+    \begin{split}
+        p_{u}^{(b)} &= 0 \quad \text{if there are no winning bidders}
+        \\
+        p_{u}^{(b)} &> 0 \quad \text{if the auction concludes with at least one winning bidder}
+    \end{split}
+\end{equation*}
+
+\subsubsection{FHE cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c| }
+    \hline    
+    Operations & $p_{u}^{(b)}$ \\ 
+    \hline
+    fheIfThenElse(U256)  & $N$ \\
+    \hline
+    \hline
+    FHE Units            & $4N$ \\
+    \hline
+\end{tabular}
+
+\subsubsection{Solidity sample code}
+
+\begin{lstlisting}[language=Solidity]
+    function uniformPrice() returns(euint256 pu) {
+        pu = TFHE.asEuint256(0);
+        for(uint16 i = 0; i < N; ++i) {
+            pu = TFHE.ifThenElse(valid(k), pRank(k), pu);
+        }
+    }    
+\end{lstlisting}
+

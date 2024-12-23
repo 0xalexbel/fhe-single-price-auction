@@ -1,0 +1,31 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage{geometry}
+\geometry{
+  left=1.5cm, % Adjust the left margin
+  right=1.5cm, % Adjust the right margi
+  top=3cm, % Adjust the top margin
+  bottom=3cm, % Adjust the bottom margin
+  % You can also use 'margin=3cm' to set all margins to the same size
+}
+\usepackage{amsmath, amssymb}
+\usepackage{blindtext}
+\usepackage{listings}
+\usepackage{filecontents, pgffor}
+\usepackage{enumitem}
+
+\input{solidity.tex}
+
+\title{FHE Single Price Auction}
+\author{Alexandre Belhoste}
+\date{\today}
+
+\begin{document}
+\maketitle
+\input{1-Single-Price-Auction.tex}
+\input{2-FHE-Precomputations.tex}
+\input{3-FHE-Sort.tex}
+\input{4-FHE-Auction.tex}
+\input{5-FHE-Cost.tex}
+
+
+\end{document}

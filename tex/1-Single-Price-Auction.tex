@@ -1,0 +1,232 @@
+\section{Single-price auction}
+
+% =============================================================================
+% Definitions
+% =============================================================================
+
+\subsection{Definitions}
+
+\subsubsection*{Bidder setup}
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Let $B_i$ denote the $i$-th bidder participating in a single-price auction with $N$ bidders, where $i \in \{1, 2, \dots, N\}$.
+    \item[--] Let $I_N = \{1, 2, \dots, N\}$ denote the \textbf{index set} of bidders. We refer to $I_N$ as the set of all bidder indices.
+    \item[--] Let $\mathcal{B} = \{ B_1, B_2, B_3, \dots, B_N \}$ denote the \textbf{bidder set}, which represents all participants in the auction. Each $B_i$ corresponds to the $i$-th bidder.
+\end{itemize}
+
+\subsubsection*{Bid definitions}
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Let $q_i$ denote the \textbf{quantity of tokens} that bidder $B_i$ wishes to purchase.
+    \item[--] Let $p_i$ denote the \textbf{unit price} that bidder $B_i$ is willing to pay for each token.
+\end{itemize}
+
+\subsubsection*{Auction definitions}
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Let $\mathcal{P}_{all}$ denote the \textbf{set of all bid prices} in the auction, including repeated bids at the same price. Formally:
+    \begin{equation*}
+        \mathcal{P}_{all} = \{ p_i \mid i \in I_N \}
+    \end{equation*}
+    \item[--] Let $S_p$ denote the \textbf{set of bidders} who bid at price $p$. This is formally defined as the \textbf{equivalence class} of $p$:
+    \begin{equation*}
+        S_p = \{ i \mid p_i = p, \, i \in I_N \}
+    \end{equation*}   
+    \item[--] Let $Q_p$ denote the \textbf{total quantity of tokens bid} at price $p$. It is defined as:
+    \begin{equation*}
+        Q_p = \sum_{i \in S_p} q_i
+    \end{equation*}
+\end{itemize}
+
+\subsubsection*{Set of distinct pid prices}
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Let $\mathcal{P}_{bids}$ denote the \textbf{set of distinct prices} bid in the auction (i.e., prices with one or more bidders). Formally:
+    \begin{equation*}
+        \mathcal{P}_{bids} = \{ p \mid \text{Card}(S_p) > 0 \}
+    \end{equation*}
+    \item[--] Let $K = \text{Card}(\mathcal{P}_{bids})$ be the number of distinct bid prices.
+    \item[--] Let $\mathcal{P}_{bids}$ be represented as a \textbf{sorted list} of distinct prices in \textbf{decreasing order}: 
+    \begin{equation*}
+        \mathcal{P}_{bids} = \{ p_{1}^{(b)}, p_{2}^{(b)}, \dots, p_{K}^{(b)} \} \ \text{where} \ p_{1}^{(b)} > p_{2}^{(b)} > \dots > p_{K}^{(b)}
+    \end{equation*}
+\end{itemize}
+
+\subsubsection*{Cumulative quantity of tokens}
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Let $C_k$ denote the \textbf{cumulative quantity of tokens bid} up to price $p_k^{(b)}$. It is defined recursively as:
+    \begin{equation*}
+        \begin{split}
+            C_0 &= 0, \\
+            C_k &= \sum_{i = 1}^{k} Q_{p_i^{(b)}} \quad \text{for} \ 1 \leq k \leq K
+        \end{split}
+    \end{equation*}
+\end{itemize}
+
+% =============================================================================
+% Bid Validation
+% =============================================================================
+
+\subsection{Bid validation}
+
+In the remainder of the problem, a bid is considered \textbf{valid} if and only if both its quantity and price are strictly positive. An \textbf{invalid} bid is equivalent to a bid with both price and quantity set to zero. Additionally, no bid quantity should exceed the total quantity of tokens available for sale, $Q$. This process is formally defined as follows:
+
+\begin{equation*}
+    \forall i \in I_N, \quad 
+\begin{cases}
+p_i > 0 \text{ and } 0 < q_i \le Q, \quad &\text{if the bid is valid}, \\
+p_i = 0 \text{ and } q_i = 0, \quad &\text{if the bid is invalid.}
+\end{cases}
+\end{equation*}
+
+\subsection{Uniform price}
+In a \textbf{uniform price auction}, the \textbf{uniform price} $p_u^{(b)}$ is the smallest price such that the cumulative quantity of tokens bid satisfies the total sold quantity $Q$. Formally:
+\begin{equation*}
+    p_{u}^{(b)} \ \text{is the uniform price such that} \ 1 \leq u \leq K \ \text{ and } \
+C_{u-1} < Q \leq C_{u}
+\end{equation*}
+
+% =============================================================================
+% Allocation
+% =============================================================================
+
+\subsection{Allocation}
+
+\paragraph{Case 1: Exact match $C_u = Q$}
+Each winning bidder $B_i$ receives exactly the quantity $q_i$ they bid for because the total cumulative demand equals the supply. Formally:
+\begin{equation*}
+    \forall i \in I_N \quad q_i^{*} = 
+\begin{cases}
+q_i \quad &\text{if } \ p_i \ge p_{u}^{(b)} \\
+0 \quad &\text{if } p_i < p_{u}^{(b)}
+\end{cases}
+\end{equation*}
+
+\paragraph{Case 2: $C_u > Q$ with a single bidder at $p_{u}^{(b)}$}
+Since only one bidder bids at $p_{u}^{(b)}$, this bidder's token quantity must be partially fulfilled to satisfy the total available token quantity $Q$.
+\begin{equation*}
+    \forall i \in I_N \quad q_i^{*} = 
+\begin{cases}
+q_i \quad &\text{if } \ p_i > p_{u}^{(b)} \\
+Q - C_{u-1} \quad &\text{if } \ p_i = p_{u}^{(b)} \\
+0 \quad &\text{if } p_i < p_{u}^{(b)}
+\end{cases}
+\end{equation*}
+
+\paragraph{Case 3: $C_u > Q$ with multiple bidders at $p_u^{(b)}$}
+When the cumulative quantity $C_u$ exceeds the total available quantity $Q$, the remaining quantity $Q - C_{u-1}$ must be allocated among multiple bidders tied at price $p_u^{(b)}$. We propose the following four tie-breaking rules:
+\begin{itemize}
+    \item FHE-compliant rules:
+    \begin{itemize}
+        \item \textbf{Price, quantity and bid placement}: Bidders at price $p_u^{(b)}$ are sorted based on their quantity and register ID (or timestamp)
+        \item \textbf{Price and bid placement}: Bidders at price $p_u^{(b)}$ are sorted based on their register ID (or timestamp).
+        \item \textbf{Price and randomization}: A unique winning bidder among those at price $p_u^{(b)}$ is randomly selected.
+    \end{itemize}
+    \item Non-FHE-compliant rules:
+    \begin{itemize}
+        \item \textbf{Pro-rata quantity allocation}: The remaining total token quantity $Q - C_{u-1}$ is allocated \textbf{proportionally} to the quantities requested by each bidder at $p_u^{(b)}$. This rule is \textbf{not FHE-compliant} since it requires the FHE computation of integer divisions.
+    \end{itemize}
+\end{itemize}
+
+% =============================================================================
+% FHE tie-breaking using a total strict order relation
+% =============================================================================
+
+\section{FHE tie-breaking using a total strict order relation}
+
+In auction theory, it is essential to establish a tie-breaking rule to resolve situations where two or more bidders are tied (e.g., when they bid the same price). In the context of an FHE auction, the chosen tie-breaking rule must be FHE-compatible.
+
+One way to achieve this is by using an FHE-compliant \textbf{total strict order} relation over the set of bidders $\mathcal{B}$, which eliminates any possible ties, preserves the final uniform price $p_u^{(b)}$, and transforms any situation where $C_u > Q$ with multiple bidders at $p_u^{(b)}$ into a solvable case with only a single bidder at $p_u^{(b)}$.
+
+The final quantity allocation is performed according to the bid order induced by $>$ until all remaining tokens are sold. The last winning bidder's token quantity may be partially fulfilled to match the total available token quantity $Q$. This method ensures that the final uniform price is also $p_u^{(b)}$.
+
+% =============================================================================
+% Bid Placement Order and Uniqueness
+% =============================================================================
+
+\subsection{Bid placement order and uniqueness}
+At the start of the auction, each bidder $B_i$ is assigned a \textbf{unique registration value} $id_i$ that reflects the order in which they placed their bid. This value can be represented by a \textbf{register ID} or \textbf{timestamp}, ensuring each bidder has a unique and comparable placement value. The following properties hold for $id_i$:
+
+\paragraph{Uniqueness:} For any two bidders $B_i$ and $B_j$:
+\begin{equation*}
+    id_i = id_j \iff i = j
+\end{equation*}
+This ensures that each bidder has a unique registration value.
+
+\paragraph{Descending Order:}
+The registration values $id_i$ are assigned such that:  
+\begin{equation*}
+    id_i > id_j \iff i < j
+\end{equation*}  
+This means that bidder $B_1$ placed their bid first, and bidder $B_N$ placed their bid last.
+As a result, we assume that the identity relation holds for all bidders in $\mathcal{B}$, expressed as:
+\begin{equation*}
+    B_i = B_j \iff i = j \iff id_i = id_j
+\end{equation*}
+
+% =============================================================================
+% Total Strict Order Relations
+% =============================================================================
+
+\subsection{Total strict order relations}
+Below, we introduce three different strict order relations such that:
+\begin{enumerate}
+    \item The set of bidders $\mathcal{B}$ is totally ordered, meaning that:
+    \begin{equation*}
+        \forall i,j \in I_N \quad i \neq j \iff B_i > B_j \text{ or } B_j > B_i
+    \end{equation*}
+    \item The final uniform price $p_u^{(b)}$ is preserved.
+\end{enumerate}
+
+\subsubsection{Order by price, quantity, and bid placement}
+\begin{equation*}
+\forall i, j \in I_N, \ B_i > B_j \iff \\
+\begin{cases} 
+p_i > p_j,\\ 
+\text{or} \\
+p_i = p_j \text{ and } q_i > q_j, \\
+\text{or} \\
+p_i = p_j \text{ and } q_i = q_j \text{ and } id_i < id_j
+\end{cases}
+\end{equation*}
+This defines a \textbf{total strict order} on the set of bidders. Specifically:
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Bidders with higher prices are ranked higher.
+    \item[--] If the prices are equal, the bidder with the higher quantity is ranked higher.
+    \item[--] If both price and quantity are equal, the bidder with the earlier bid placement (lower $id_i$) is ranked higher.
+\end{itemize}
+
+\subsubsection{Order by price and bid placement}
+\begin{equation*}
+\forall i, j \in I_N, \ B_i > B_j \iff \\
+\begin{cases} 
+p_i > p_j,\\ 
+\text{or} \\
+p_i = p_j \text{ and } id_i < id_j
+\end{cases}
+\end{equation*}
+This defines a \textbf{total strict order} on the set of bidders. Specifically:
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Bidders with higher prices are ranked higher.
+    \item[--] If the prices are equal, the bidder with the earlier bid placement (lower $id_i$) is ranked higher.
+\end{itemize}
+
+\subsubsection{Order by price and randomization}
+Let $rand(i)$ be a random value uniquely assigned to each bidder $B_i$, used for tie-breaking in the order relation.   
+\begin{equation*}
+    \forall i, j \in I_N, \ B_i > B_j \iff \\
+    \begin{cases} 
+        p_i > p_j,\\ 
+        \text{or} \\
+        p_i = p_j \text{ and } rand(i) > rand(j)
+    \end{cases}
+\end{equation*}
+This defines a \textbf{total strict order} on the set of bidders. Specifically:
+\begin{itemize}
+    \setlength\itemsep{0em}
+    \item[--] Bidders with higher prices are ranked higher.
+    \item[--] If the prices are equal, the bidder with the highest random value is ranked higher.
+\end{itemize}

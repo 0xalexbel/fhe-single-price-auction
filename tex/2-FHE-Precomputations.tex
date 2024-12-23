@@ -1,0 +1,298 @@
+\section{FHE precomputations}
+
+% =============================================================================
+% Bid validation
+% =============================================================================
+
+\subsection{Bid validation}
+
+\subsubsection{Upper bounds}
+To ensure that no operation results in arithmetic overflow, the following conditions must be satisfied:
+\begin{equation*}
+    \begin{split}
+        N &< 2^{16} \\
+        \sum_{i=1}^{N} q_i &< 2^{256}
+    \end{split}
+\end{equation*}
+which can be simplified into the stricter condition:
+\begin{equation*}
+    N < 2^{16} \ \text{ and } \ Q < 2^{240} \ \text{ and } \ \forall i \in I_N, \ q_i \le Q  
+\end{equation*}
+By imposing this condition on each bidder, we can handle the worst-case scenario without arithmetic overflow:
+\begin{equation*}
+    \begin{cases}
+        N = 2^{16}-1 &\text { unique bidders participating in the auction, } \\
+        Q = 2^{240}-1 &\text { tokens available for sale in the auction, } \\
+        q = 2^{240}-1 &\text { quantity of tokens bid by each bidder. } \\
+    \end{cases}
+\end{equation*}
+
+\subsubsection{Quantity clamping}
+Ensure that bid quantities do not exceed the total available quantity $Q$:
+\begin{equation*}
+    \forall i \in I_N, \quad q_i := \min(Q, q_i) 
+\end{equation*}
+
+\subsubsection{Validation}
+Update bids to reflect validity conditions:
+\begin{equation*}
+    (p_i, q_i) := 
+    \begin{cases}
+        (0, 0), \quad &\text{if } p_i = 0 \text{ or } q_i = 0, \\
+        (p_i, q_i), \quad &\text{otherwise.}
+    \end{cases}
+\end{equation*}
+
+% =============================================================================
+% Price Matrices
+% =============================================================================
+
+\subsection{Price Matrices $\mathbf{P_{eq}}$, $\mathbf{P_{ge}}$, $\mathbf{P_{gt}}$}
+
+\subsubsection{Definitions}
+\begin{itemize}
+    \item Let $\mathbf{P_{eq}} = (\mathbf{P_{eq}}[i, \ j])_{\ 1 \le i, j \le N}$ denote the price equality matrix on $\mathcal{B}$, whose entries are defined as follows:
+    \begin{equation*}
+        \forall i,j \in I_N, \quad \mathbf{P_{eq}}[i, j] = 
+        \begin{cases}
+            1  \quad \text{if } \ p_{i} = p_{j} \\
+            0  \quad \text{otherwise} \\
+        \end{cases}
+    \end{equation*}        
+    \item Let $\mathbf{P_{ge}} = (\mathbf{P_{ge}}[i, \ j])_{\ 1 \le i, j \le N}$ denote the price comparison matrix on $\mathcal{B}$, whose entries are defined as follows:
+    \begin{equation*}
+        \forall i,j \in I_N, \quad \mathbf{P_{ge}}[i, j] = 
+        \begin{cases}
+            1  \quad \text{if } \ p_{i} \ge p_{j} \\
+            0  \quad \text{otherwise} \\
+        \end{cases}
+    \end{equation*}
+    \item Let $\mathbf{P_{gt}} = (\mathbf{P_{gt}}[i, \ j])_{\ 1 \le i, j \le N}$ denote the price comparison matrix on $\mathcal{B}$, whose entries are defined as follows:
+    \begin{equation*}
+        \forall i,j \in I_N, \quad \mathbf{P_{gt}}[i, j] = 
+        \begin{cases}
+            1  \quad \text{if } \ p_{i} > p_{j} \\
+            0  \quad \text{otherwise} \\
+        \end{cases}
+    \end{equation*}
+\end{itemize}
+Which can be simplified:    
+\begin{equation*}
+\begin{split}
+    \mathbf{P_{eq}}[i, j] &= 
+    \begin{cases}
+        1              \quad &\text{if } \ i = j \\
+        p_{i} = p_{j}  \quad &\text{if } \ i < j \\
+        \mathbf{P_{eq}}[j, i] \quad &\text{if } \ i > j \\
+    \end{cases}
+    \\
+    \\
+    \mathbf{P_{gt}}[i, j] &= 
+    \begin{cases}
+        0              \quad &\text{if } \ i = j \\
+        p_{i} > p_{j}  \quad &\text{if } \ i < j \\
+        \neg(\mathbf{P_{gt}}[j, i] \lor \mathbf{P_{eq}}[i, j])  \quad &\text{if }  \ i > j
+    \end{cases}
+    \\
+    \\
+    \mathbf{P_{ge}}[i, j] &= 
+    \begin{cases}
+        1              \quad &\text{if } \ i = j \\
+        \mathbf{P_{gt}}[j, i] \lor \mathbf{P_{eq}}[j, i] \quad &\text{if }  \ i > j
+    \end{cases}
+\end{split}
+\end{equation*}
+
+\subsubsection{FHE Cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c|c| }
+    \hline    
+    Operations & $\mathbf{P_{eq}}$ & $\mathbf{P_{ge}}$ & $\mathbf{P_{gt}}$ \\ 
+    \hline
+    fheEq(U256)         & $N(N-1)/2$  & $0$      & $0$ \\
+    fheGt(U256)         & $0$         & $0$      & $N(N-1)/2$ \\
+    fheOr(Bool)         & $0$         & $N(N-1)$ & $N(N-1)/2$ \\
+    fheNot(Bool)        & $0$         & $0$      & $N(N-1)/2$ \\
+    \hline
+    \hline
+    FHE Units           & $2N(N-1)$   & $N(N-1)$ & $11N(N-1)/2$ \\
+    \hline
+\end{tabular}
+
+% =============================================================================
+% Quantity Matrices
+% =============================================================================
+
+\subsection{Quantity Matrices $\mathbf{Q_{eq}}$, $\mathbf{Q_{ge}}$, $\mathbf{Q_{gt}}$}
+Similarly, we define the quantity matrices $\mathbf{Q_{eq}}$, $\mathbf{Q_{gt}}$ and $\mathbf{Q_{ge}}$ in the same manner.
+
+% =============================================================================
+% Random Matrix
+% =============================================================================
+
+\subsection{Random Matrix $\mathbf{Rand_{gt}}$}
+
+To perform the auction allocation using price and randomization, we assign each bidder $B_i$ a unique random value to serve as a tie-breaking rule between bidders.
+
+\subsubsection{Definition}
+
+\begin{itemize}
+\item Let $rand(i)$ denote a bijective function that assigns a unique random value to each bidder $B_i$. It is formally defined as follows:
+\begin{equation*}
+    rand: I_N \to I_N \\
+    \forall i,j \in I_N, \quad i = j \iff rand(i) = rand(j)
+\end{equation*}
+
+\item Let $\mathbf{Rand_{gt}} = (\mathbf{Rand_{gt}}[i, \ j])_{\ 1 \le i, j \le N}$ denote random value comparison matrix on $\mathcal{B}$. The entries $\mathbf{Rand_{gt}}[i, j]$ are defined as follows:
+\begin{equation*}
+    \forall i,j \in I_N, \quad \mathbf{Rand_{gt}}[i, j] = 
+    \begin{cases}
+        1  \quad \text{if } \ rand(i) > rand(j) \\
+        0  \quad \text{otherwise} \\
+    \end{cases}
+\end{equation*}
+\end{itemize}
+
+\subsubsection{FHE Fisher-Yates Shuffle Algorithm}
+One way to compute the matrix $\mathbf{Rand_{gt}}$ is by shuffling the set $\{ 1, 2, \dots, N \}$ using the $O(N)$ Fisher-Yates shuffle algorithm.
+
+\subsubsection{Solidity sample code}
+
+\begin{lstlisting}[language=Solidity]
+
+    // returns true if i is a power of 2
+    function isPowerOfTwo(uint16 i) returns (bool);
+    
+    function swap(uint16 a, euint16 b, euint16[] memory arr) {
+        for(uint16 i = 0; i < N; ++i) {
+            ebool b_eq_i = TFHE.eq(b, i);
+            // arr[b] = arr[a];
+            arr[i] = TFHE.ifThenElse(b_eq_i, arr[a], arr[i]);
+            // arr[a] = arr[b]
+            arr[a] = TFHE.ifThenElse(b_eq_i, arr[i], arr[a]);
+        }
+    }
+    
+    function shuffle(euint16[] memory arr) {
+        for(uint16 i = N-1; i >= 1; --i) {
+            euint16 j;
+            // j = random integer such that 0 <= j <= i
+            if (isPowerOfTwo(i+1)) {
+                // returns [0, i+1) = [0, i]
+                j = TFHE.randEuint16(i+1);
+            } else {
+                euint16 rnd = TFHE.randEuint16();
+                // returns [0, i+1) = [0, i]
+                j = TFHE.rem(rnd, i+1);
+            }
+            swap(i, j, arr);
+        }
+    }
+    
+    function rand(uint16 i) returns(euint16) {
+        return shuffledArray[i];
+    }
+        
+\end{lstlisting}
+
+\subsubsection{FHE Cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c|c| }
+    \hline    
+    Operations & swap & shuffle & $\mathbf{Rand_{gt}}$ \\ 
+    \hline
+    fheEq(U16)          & $N$   & $0$      & $0$ \\
+    fheIfThenElse(U16)  & $2N$  & $0$      & $0$ \\
+    fheRand(U16)        & $0$   & $N-1$    & $0$ \\
+    fheRem(U16)         & $0$   & $N-1$    & $0$ \\
+    fheGt(U16)          & $0$   & $0$      & $N^2$ \\
+    \hline
+    \hline
+    FHE Units           & $6N$  & $(6N + 28)(N-1)$ & $2N^2$ \\
+    \hline
+\end{tabular}
+
+% =============================================================================
+% Bid Order Comparison Matrix
+% =============================================================================
+
+\subsection{Bid Order Comparison Matrix $\mathbf{B_{gt}}$}
+
+Given a strict order relation $>$ on $\mathcal{B}$, we define $\mathbf{B_{gt}} = (\mathbf{B_{gt}}[i, j])_{1 \le i, j \le N}$ as the \textbf{binary comparison matrix} associated with $>$. The entries $\mathbf{B_{gt}}[i, j]$ are defined as follows:
+
+\begin{equation*}
+    \forall i, j \in I_N, \quad \mathbf{B_{gt}}[i, j] = 
+    \begin{cases}
+        1  & \text{if } B_i > B_j, \\
+        0  & \text{otherwise}.
+    \end{cases}
+\end{equation*}
+
+\subsubsection{Order by Price, Quantity, and Bid Placement}
+
+\begin{equation*}
+    \forall i,j \in I_N, \quad \mathbf{B_{gt}}[i, j] = 
+    \begin{cases}
+        0  \quad &\text{if } \ i = j \\
+        \mathbf{P_{ge}}[i, j] \ \land \ [ \ \mathbf{P_{gt}}[i, j] \ \lor \ \mathbf{Q_{ge}}[i, j] \ ]  \quad &\text{if } \ i < j \\
+        \neg \mathbf{B_{gt}}[j, i] \quad &\text{if } \ i > j
+    \end{cases}
+\end{equation*}
+
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c|c| }
+    \hline    
+    Operations & $\mathbf{B_{gt}}$ \\ 
+    \hline
+    fheOr(bool)          & $N(N-1)/2$   \\
+    fheAnd(bool)         & $N(N-1)/2$   \\
+    fheNot(bool)         & $N(N-1)/2$   \\
+    \hline
+    \hline
+    FHE Units           & $3N(N-1)/2$  \\
+    \hline
+\end{tabular}
+
+\subsubsection{Order by Price and Bid Placement}
+
+\begin{equation*}
+    \forall i,j \in I_N, \quad \mathbf{B_{gt}}[i, j] = 
+    \begin{cases}
+        0  \quad &\text{if } \ i = j \\
+        \mathbf{P_{ge}}[i, j] \quad &\text{if } \ i < j \\
+        \mathbf{P_{gt}}[i, j] \quad &\text{if } \ i > j
+    \end{cases}
+\end{equation*}
+
+The additionnal FHE-cost is null when bidders are sorted using price and bid placement.
+
+\subsubsection{Order by Price and Randomization}
+
+Using the $\mathbf{Rand_{gt}}$ matrix defined above, the comparison matrix can be computed as follows:
+
+\begin{equation*}
+    \forall i,j \in I_N, \quad \mathbf{B_{gt}}[i, j] = 
+    \begin{cases}
+        0  \quad &\text{if } \ i = j \\
+        \mathbf{P_{ge}}[i, j] \land [ \ \mathbf{P_{gt}}[i, j] \lor \mathbf{Rand_{gt}}[i, j] \ ] \quad &\text{if } \ i < j \\
+        \neg \mathbf{B_{gt}}[j, i] \quad &\text{if } \ i > j
+    \end{cases}
+\end{equation*}
+
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|c|c|c| }
+    \hline    
+    Operations & $\mathbf{B_{gt}}$ \\ 
+    \hline
+    fheOr(bool)          & $N(N-1)/2$   \\
+    fheAnd(bool)         & $N(N-1)/2$   \\
+    fheNot(bool)         & $N(N-1)/2$   \\
+    \hline
+    \hline
+    FHE Units           & $3N(N-1)/2$  \\
+    \hline
+\end{tabular}

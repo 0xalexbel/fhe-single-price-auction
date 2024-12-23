@@ -1,0 +1,26 @@
+\section{FHE operations unit cost}
+
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{ |l|r|c| }
+    \hline    
+    Operations & Cost & Unit Cost (approx.) \\ 
+    \hline
+    fheBitShl(U16)      &  35000     & 1  \\
+    fheBitAnd(Bool)     &  26000     & 1  \\
+    fheBitAnd(U256)     &  44000     & 2  \\
+    fheEq(U16)          &  54000     & 2  \\
+    fheEq(U256)         & 100000     & 4  \\
+    fheGt(U16)          & 105000     & 4  \\
+    fheGt(U256)         & 231000     & 9  \\
+    fheGe(U16)          & 105000     & 4  \\
+    fheGe(U256)         & 231000     & 9  \\
+    fheAdd(U16)         & 133000     & 5   \\
+    fheAdd(U256)        & 253000     & 10  \\
+    fheSub(U256)        & 253000     & 10  \\
+    fheIfThenElse(U16)  &  47000     & 2   \\
+    fheIfThenElse(U256) &  90000     & 4   \\
+    fheMin(U256)        & 277000     & 11  \\
+    fheRand(U16)        & 100000     & 4   \\
+    fheRem(U16)         & 622000     & 24  \\
+    \hline
+\end{tabular}
