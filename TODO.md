@@ -1,11 +1,14 @@
-- Class rearchitecture + interfaces files
+- BEAUCOUP PLUS DE TESTS
+- Generer une doc
+- IMPORTANT! Tie Break rules
+- IMPORTANT! call engine.close when time is up
+- Measure Gas
+- Rename ABid struct
 - extensions
   - FHEAuctionEncryptedERC20
 - Comments
 - balanceOf() -> euint256 instead
 - Factories
 - Test eERC20
-- Measure Gas
-- Rename ABid struct
-- IMPORTANT! Tie Break rules
-- IMPORTANT! call engine.close when time is up
+- Minimum Quantity option
+- Minimum Price option

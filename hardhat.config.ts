@@ -14,6 +14,7 @@ import "./tasks/accounts";
 import "./tasks/etherscanVerify";
 import "./tasks/mintMyConfidentialERC20";
 import { setCodeMocked } from "./test/mockedSetup";
+import "solidity-docgen";
 
 extendProvider(async (provider) => {
   const newProvider = new CustomProvider(provider);

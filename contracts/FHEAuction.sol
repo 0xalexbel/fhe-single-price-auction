@@ -10,8 +10,8 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     mapping(address account => uint256) private _balances;
     mapping(uint256 requestID => address bidder) private _requestIDToBidder;
 
-    constructor(uint256 minimumPaymentBalance, uint256 paymentPenalty)
-        FHEAuctionBase(minimumPaymentBalance, paymentPenalty)
+    constructor(uint256 minimumPaymentDeposit_, uint256 paymentPenalty_)
+        FHEAuctionBase(minimumPaymentDeposit_, paymentPenalty_)
     {}
 
     /**
@@ -49,6 +49,7 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     /**
      * @notice Callback function to compute the requested claim.
      * @dev Can only be called by the Gateway
+     * @param requestID The fhEVM gateway requestID
      * @param clearValidatedPrice The requester decrypted auction validated price. If zero, the bid is considered as invalid and subject ot penalty
      * @param clearWonQuantity The requester decrypted auction final won quantity
      */
@@ -71,7 +72,7 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
             require(clearWonQuantity == 0, "Panic: clearValidatedPrice == 0 && clearWonQuantity != 0");
         }
 
-        _completeClaim(bidder);
+        _markClaimCompleted(bidder);
 
         if (clearWonQuantity > 0) {
             uint256 bidderDueAmount = uniformPrice * clearWonQuantity;

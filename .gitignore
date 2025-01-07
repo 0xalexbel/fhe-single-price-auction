@@ -15,6 +15,7 @@ network-fhe-keys/
 fhevmTemp/
 abi/
 trash/
+docs/
 
 # forge-fhevm
 cache_forge

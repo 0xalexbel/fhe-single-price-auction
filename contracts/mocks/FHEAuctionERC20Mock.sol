@@ -9,9 +9,9 @@ import {console} from "hardhat/console.sol";
 
 contract FHEAuctionERC20Mock is FHEAuctionERC20 {
     constructor(
-        uint256 minimumPaymentBalance_,
+        uint256 minimumPaymentDeposit_,
         uint256 paymentPenalty_,
         IERC20 paymentToken_
-    ) FHEAuctionERC20(minimumPaymentBalance_, paymentPenalty_, paymentToken_) {
+    ) FHEAuctionERC20(minimumPaymentDeposit_, paymentPenalty_, paymentToken_) {
     }
 }
