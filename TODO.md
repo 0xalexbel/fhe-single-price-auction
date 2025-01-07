@@ -1,0 +1,11 @@
+- Class rearchitecture + interfaces files
+- extensions
+  - FHEAuctionEncryptedERC20
+- Comments
+- balanceOf() -> euint256 instead
+- Factories
+- Test eERC20
+- Measure Gas
+- Rename ABid struct
+- IMPORTANT! Tie Break rules
+- IMPORTANT! call engine.close when time is up

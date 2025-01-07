@@ -1,0 +1,9 @@
+forge-std/=dependencies/forge-std-1.9.3/
+forge-fhevm/=dependencies/forge-fhevm-0.6.2/
+forge-fhevm-config/=dependencies/forge-fhevm-0.6.2/configs/sepolia/
+fhevm/=dependencies/forge-fhevm-0.6.2/src/libs/fhevm-debug/
+@openzeppelin/=node_modules/@openzeppelin/
+fhevm-contracts/=node_modules/fhevm-contracts/
+fhevm-core-contracts/=node_modules/fhevm-core-contracts/
+hardhat-deploy/=node_modules/hardhat-deploy/
+hardhat/=node_modules/hardhat/
