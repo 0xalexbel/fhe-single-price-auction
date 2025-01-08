@@ -1,20 +1,17 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.24;
 
-import {TFHE, euint16, euint256} from  "fhevm/lib/TFHE.sol";
+import {TFHE, euint16, euint256} from "fhevm/lib/TFHE.sol";
 import {FHEAuctionEngine} from "../FHEAuctionEngine.sol";
 
 import {console} from "hardhat/console.sol";
 
 contract FHEAuctionEngineMock is FHEAuctionEngine {
-    constructor(
-        address vault_
-    ) FHEAuctionEngine(vault_) {
-    }
+    constructor(address vault_) FHEAuctionEngine(vault_) {}
 
     function allowBids() external {
         uint16 n = getBidCount();
-        for(uint16 i = 0; i < n; ++i) {
+        for (uint16 i = 0; i < n; ++i) {
             // external call is better for coprocessorUtils.ts
             this.allowAccountToAccessBidWithIndex(i, msg.sender);
         }
@@ -22,7 +19,7 @@ contract FHEAuctionEngineMock is FHEAuctionEngine {
 
     function allowRankedBids() external {
         uint16 n = getBidCount();
-        for(uint16 i = 0; i < n; ++i) {
+        for (uint16 i = 0; i < n; ++i) {
             // external call is better for coprocessorUtils.ts
             this.allowAccountToAccessBidWithRank(i, msg.sender);
         }

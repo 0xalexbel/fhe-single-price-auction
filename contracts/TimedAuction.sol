@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 pragma solidity ^0.8.24;
+
 import {ITimedAuction} from "./ITimedAuction.sol";
 
 abstract contract TimedAuction is ITimedAuction {
@@ -8,28 +9,28 @@ abstract contract TimedAuction is ITimedAuction {
     uint256 private _flags;
     bool private _stoppable;
 
-    /**
-        State Graph:
-        ------------
-            UNINITIALIZED               ->  INITIALIZED
-            INITIALIZED                 ->  INITIALIZED_TERMINATED
-                                            INITIALIZED_STARTED
-            INITIALIZED_STARTED         ->  INITIALIZED_STARTED_ENDED
-                                            INITIALIZED_STARTED_ENDED_TERMINATED
-            INITIALIZED_STARTED_ENDED   ->  INITIALIZED_STARTED_ENDED_TERMINATED
+    /*
+     * State Graph:
+     * ------------
+     *         UNINITIALIZED               ->  INITIALIZED
+     *         INITIALIZED                 ->  INITIALIZED_TERMINATED
+     *                                         INITIALIZED_STARTED
+     *         INITIALIZED_STARTED         ->  INITIALIZED_STARTED_ENDED
+     *                                         INITIALIZED_STARTED_ENDED_TERMINATED
+     *         INITIALIZED_STARTED_ENDED   ->  INITIALIZED_STARTED_ENDED_TERMINATED
      */
 
-    uint256 constant private UNINITIALIZED = uint256(0x0);
-    uint256 constant private INITIALIZED = uint256(0x1);
-    uint256 constant private INITIALIZED_TERMINATED = uint256(0x9);
-    uint256 constant private INITIALIZED_STARTED = uint256(0x3);
-    uint256 constant private INITIALIZED_STARTED_ENDED = uint256(0x7);
-    uint256 constant private INITIALIZED_STARTED_ENDED_TERMINATED = uint256(0xF);
+    uint256 private constant UNINITIALIZED = uint256(0x0);
+    uint256 private constant INITIALIZED = uint256(0x1);
+    uint256 private constant INITIALIZED_TERMINATED = uint256(0x9);
+    uint256 private constant INITIALIZED_STARTED = uint256(0x3);
+    uint256 private constant INITIALIZED_STARTED_ENDED = uint256(0x7);
+    uint256 private constant INITIALIZED_STARTED_ENDED_TERMINATED = uint256(0xF);
 
-    uint256 constant private FLAGS_INITIALIZED = uint256(0x1);
-    uint256 constant private FLAGS_STARTED = uint256(0x2);
-    uint256 constant private FLAGS_ENDED = uint256(0x4);
-    uint256 constant private FLAGS_TERMINATED = uint256(0x8);
+    uint256 private constant FLAGS_INITIALIZED = uint256(0x1);
+    uint256 private constant FLAGS_STARTED = uint256(0x2);
+    uint256 private constant FLAGS_ENDED = uint256(0x4);
+    uint256 private constant FLAGS_TERMINATED = uint256(0x8);
 
     error NotInitialized();
     error NotInitializable();
@@ -41,22 +42,21 @@ abstract contract TimedAuction is ITimedAuction {
     error NotClosed();
     error InvalidDuration();
 
-    constructor() {
-    }
+    constructor() {}
 
-    function durationInSeconds() public view returns(uint256) {
+    function durationInSeconds() public view returns (uint256) {
         return _endTime - _startTime;
     }
 
-    function startTime() public view returns(uint256) {
+    function startTime() public view returns (uint256) {
         return _startTime;
     }
 
-    function endTime() public view returns(uint256) {
+    function endTime() public view returns (uint256) {
         return _endTime;
     }
 
-    function _state() internal view returns(uint256) {
+    function _state() internal view returns (uint256) {
         uint256 f = _flags;
         if (f == INITIALIZED_STARTED) {
             if (block.timestamp >= _endTime) {
@@ -94,15 +94,15 @@ abstract contract TimedAuction is ITimedAuction {
         }
     }
 
-    function canStart() public view returns(bool) {
+    function canStart() public view returns (bool) {
         return _flags == INITIALIZED;
     }
 
-    function canStop() public view returns(bool) {
+    function canStop() public view returns (bool) {
         return (_flags == INITIALIZED_STARTED) && _stoppable;
     }
 
-    function canTerminate() public view returns(bool) {
+    function canTerminate() public view returns (bool) {
         uint256 f = _flags;
         if (f == UNINITIALIZED || f == INITIALIZED_TERMINATED || f == INITIALIZED_STARTED_ENDED_TERMINATED) {
             return false;
@@ -119,23 +119,23 @@ abstract contract TimedAuction is ITimedAuction {
         return true;
     }
 
-    function _canTerminateAfterStart() internal view virtual returns(bool) {
+    function _canTerminateAfterStart() internal view virtual returns (bool) {
         return true;
     }
 
-    function initialized() public view returns(bool) {
+    function initialized() public view returns (bool) {
         return _flags != UNINITIALIZED;
     }
 
-    function isOpen() public view returns(bool) {
+    function isOpen() public view returns (bool) {
         return _state() == INITIALIZED_STARTED;
     }
 
-    function closed() public view returns(bool) {
+    function closed() public view returns (bool) {
         return _state() == INITIALIZED_STARTED_ENDED;
     }
 
-    function terminated() public view returns(bool) {
+    function terminated() public view returns (bool) {
         return _flags & FLAGS_TERMINATED != 0;
     }
 

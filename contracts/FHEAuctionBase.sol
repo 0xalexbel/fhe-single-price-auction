@@ -13,6 +13,23 @@ import {IFHEAuctionEngine} from "./IFHEAuctionEngine.sol";
 
 import {console} from "hardhat/console.sol";
 
+/**
+ * @dev Abstract contract for implementing a Single Price Auction.
+ * This implementation is payment-agnostic, supporting various types of payments such as Ether, ERC20 tokens, or encrypted ERC20 tokens.
+ * As a result, a payment or deposit locking mechanism must be implemented in a derived contract.
+ *
+ * Provides fundamental auction functionality, including:
+ * - Initialization
+ * - Auction timing (open/close states)
+ * - Bid placement and canceling
+ * - Prize claiming by bidders
+ * - Auction termination
+ *
+ * The contract interacts with a separate `TFHEAuctionEngine` contract, which is responsible for:
+ * - Validating bids
+ * - Ranking bids
+ * - Computing the final prize for each bidder
+ */
 abstract contract FHEAuctionBase is
     SepoliaZamaFHEVMConfig,
     SepoliaZamaGatewayConfig,
@@ -51,13 +68,13 @@ abstract contract FHEAuctionBase is
     error AlreadyClaimed(address bidder);
     error NotReadyToClaim(address bidder);
     error UniformPriceNotReadyToDecrypt();
-    
+
     /**
-    * @notice Thrown when the account's payment token balance is insufficient to perform the operation.
-    *
-    * @param balance The current payment token balance of the account.
-    * @param needed The required payment token balance to complete the operation.
-    */
+     * @notice Thrown when the account's payment token balance is insufficient to perform the operation.
+     *
+     * @param balance The current payment token balance of the account.
+     * @param needed The required payment token balance to complete the operation.
+     */
     error InsufficientBalance(uint256 balance, uint256 needed);
 
     /**
@@ -68,13 +85,13 @@ abstract contract FHEAuctionBase is
      */
     error PaymentPenaltyTooHigh(uint256 minimumBalance, uint256 penalty);
 
-     /**
-      * @notice Reverts if `paymentPenalty_` exceeds `minimumPaymentDeposit_`. 
-      * Ensures the auction retains sufficient payment tokens to cover any penalty fees.
-      *
-      * @param minimumPaymentDeposit_ The minimum amount of payment tokens a bidder must deposit before placing any bid.
-      * @param paymentPenalty_ The amount of payment tokens transferred to the auction's {beneficiary} for each invalid bid.
-      */
+    /**
+     * @notice Reverts if `paymentPenalty_` exceeds `minimumPaymentDeposit_`.
+     * Ensures the auction retains sufficient payment tokens to cover any penalty fees.
+     *
+     * @param minimumPaymentDeposit_ The minimum amount of payment tokens a bidder must deposit before placing any bid.
+     * @param paymentPenalty_ The amount of payment tokens transferred to the auction's {beneficiary} for each invalid bid.
+     */
     constructor(uint256 minimumPaymentDeposit_, uint256 paymentPenalty_) Ownable(msg.sender) {
         if (paymentPenalty_ > minimumPaymentDeposit_) {
             revert PaymentPenaltyTooHigh(minimumPaymentDeposit_, paymentPenalty_);
@@ -88,7 +105,7 @@ abstract contract FHEAuctionBase is
      *
      * @notice Requirements:
      * - The auction must have started.
-     * - Must be used as a final modifier as it is not checking if the auction is initialized 
+     * - Must be used as a final modifier as it is not checking if the auction is initialized
      */
     modifier onlyBidder() {
         _checkBidder();
@@ -113,7 +130,7 @@ abstract contract FHEAuctionBase is
 
     /**
      * @notice Initializes the auction with a specified auction engine and parameters.
-     * During initialization, `auctionQuantity_` tokens will be transferred to the current auction contract as 
+     * During initialization, `auctionQuantity_` tokens will be transferred to the current auction contract as
      * a deposit. If the contract is unable to transfer the required amount, the function will revert.
      *
      * @notice Requirements:
@@ -123,7 +140,7 @@ abstract contract FHEAuctionBase is
      * - The `auctionToken_` must not be the zero address.
      * - The `auctionQuantity_` must be strictly positive.
      * - The `beneficiary_` must not be the zero address.
-     * - The `beneficiary_` must have approved the transfer of at least `auctionQuantity_` tokens to 
+     * - The `beneficiary_` must have approved the transfer of at least `auctionQuantity_` tokens to
      * the current auction contract.
      * - The `tieBreakingRule_` must be a valid value.
      *
@@ -219,7 +236,7 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Returns the penalty fee (in payment tokens) charged to a bidder for insufficient balance 
+     * @notice Returns the penalty fee (in payment tokens) charged to a bidder for insufficient balance
      * to pay their auction prize at the end of the auction.
      */
     function paymentPenalty() public view returns (uint256) {
@@ -258,7 +275,7 @@ abstract contract FHEAuctionBase is
      * @notice Returns the encrypted bid of the caller.
      * @return price The unit price (encrypted) that the caller has offered to pay per token being auctioned.
      * @return quantity The total quantity (encrypted) of tokens the caller has bidded for.
-     */    
+     */
     function getBid() public view returns (euint256 price, euint256 quantity) {
         price = _bidderToBid[msg.sender].price;
         quantity = _bidderToBid[msg.sender].quantity;
@@ -320,22 +337,22 @@ abstract contract FHEAuctionBase is
 
     /**
      * @notice Returns `true` if the bidder can claim their auction prize, `false` otherwise.
-     * Internal function without access restriction. 
+     * Internal function without access restriction.
      * This function is meant to be overriden to add extra conditions for a successfull claim.
      *
      * @notice Conditions for a successful claim:
      * - All bidders' won quantities have been computed by the auction `_engine`.
      * - The `bidder` has not yet claimed their prize.
-     * 
+     *
      * @param bidder address of the bidder
      */
-    function _canClaim(address bidder) internal virtual view returns (bool) {
+    function _canClaim(address bidder) internal view virtual returns (bool) {
         if (claimCompleted(bidder)) {
             // Cannot claim twice
             return false;
         }
 
-        if(!IFHEAuctionEngine(_engine).canClaim()) {
+        if (!IFHEAuctionEngine(_engine).canClaim()) {
             // Computation is not complete
             return false;
         }
@@ -344,7 +361,7 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Claim the caller's won quantity of token sold in the auction at the final uniform price 
+     * @notice Claim the caller's won quantity of token sold in the auction at the final uniform price
      *
      * @notice Requirements:
      * - The auction must be closed.
@@ -364,7 +381,8 @@ abstract contract FHEAuctionBase is
             revert AlreadyClaimed(bidder);
         }
 
-        (euint256 validatedPrice, euint256 wonQuantity) = IFHEAuctionEngine(_engine).validatedPriceAndWonQuantityById(id);
+        (euint256 validatedPrice, euint256 wonQuantity) =
+            IFHEAuctionEngine(_engine).validatedPriceAndWonQuantityById(id);
         if (euint256.unwrap(wonQuantity) == 0) {
             revert NotReadyToClaim(bidder);
         }
@@ -375,7 +393,7 @@ abstract contract FHEAuctionBase is
     /**
      * @notice Abstract internal function that must be implemented by derived contracts.
      * This function is intended to handle the claim process for a given bidder.
-     * The implementation should define the logic for processing the claim based on 
+     * The implementation should define the logic for processing the claim based on
      * the provided bidder, auction ID, validated price, and won quantity.
      */
     function _claim(address bidder, uint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
@@ -394,10 +412,10 @@ abstract contract FHEAuctionBase is
      *
      * This function updates the internal state to reflect that the bidder has successfully claimed
      * their auction prize. It will revert if the bidder has already claimed their prize.
-     * 
+     *
      * @notice Requirements:
      * - The bidder must not have already completed the claim.
-     * 
+     *
      * @param bidder The address of the bidder whose claim is being marked as completed.
      */
     function _markClaimCompleted(address bidder) internal {
@@ -409,17 +427,14 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-    * @notice Overrides the `TimedAuction._canTerminateAfterStart` function.
-    * Returns `true` if all bidders have successfully claimed their respective auction prizes.
-    *
-    * @dev This function is called as part of the termination logic (see `canTerminate`).
-    */
+     * @dev See {TimedAuction-_canTerminateAfterStart}.
+     */
     function _canTerminateAfterStart() internal view override returns (bool) {
         return _claimCount == bidCount();
     }
 
     /**
-     * @notice Terminates the auction. 
+     * @notice Terminates the auction.
      * An auction can be terminated if it has not yet started, `bidCount` is zero, or all bids have been claimed.
      * When terminated, all tokens being auctioned are transferred back to the `beneficiary`.
      *
@@ -450,32 +465,29 @@ abstract contract FHEAuctionBase is
 
     /**
      * @notice Cancels the caller's bid.
-     * 
+     *
      * @notice Requirements:
      * - The caller must be a registered bidder.
      * - The auction must be open, meaning it is currently accepting bids.
      */
-     function cancelBid() external nonReentrant whenIsOpen onlyBidder {
+    function cancelBid() external nonReentrant whenIsOpen onlyBidder {
         _cancelBid(msg.sender);
     }
 
     /**
      * @notice Internal function without access restrictions.
-     * This function is intended to be overridden in derived contracts to implement 
+     * @dev This function is intended to be overridden in derived contracts to implement
      * additional operations that should occur when a bid is canceled.
-     *    
+     *
      * @param bidder The address of the bidder whose bid is being canceled.
-     */ 
+     */
     function _cancelBid(address bidder) internal virtual {
-        _bidderToBid[bidder] = Bid({
-            price: euint256.wrap(0),
-            quantity: euint256.wrap(0)
-        });
+        _bidderToBid[bidder] = Bid({price: euint256.wrap(0), quantity: euint256.wrap(0)});
         IFHEAuctionEngine(_engine).removeBid(bidder);
     }
 
     /**
-     * @notice Returns the decrypted final uniform auction price. The function returns `0` if 
+     * @notice Returns the decrypted final uniform auction price. The function returns `0` if
      * the auction is not completed and the price is not yet available. Non zero otherwise.
      */
     function clearUniformPrice() public view returns (uint256) {
@@ -516,7 +528,7 @@ abstract contract FHEAuctionBase is
      * @notice Can only be called by the Gateway
      * @param resultDecryption The decrypted auction final uniform price
      */
-    function callbackDecryptUniformPrice(uint256 /*requestID*/, uint256 resultDecryption) external onlyGateway {
+    function callbackDecryptUniformPrice(uint256, /*requestID*/ uint256 resultDecryption) external onlyGateway {
         _clearUniformPrice = resultDecryption;
     }
 }

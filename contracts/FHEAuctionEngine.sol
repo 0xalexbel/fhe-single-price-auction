@@ -15,10 +15,10 @@ import {console} from "hardhat/console.sol";
  * ### Step 1: Bid validation. O(N)
  *
  * The first step is to sanitize the list of registered bids by evaluating each one individually. If a bid fails to meet
- * the engine's validation criteria, it is marked as invalid, with both the price and quantity set to zero 
+ * the engine's validation criteria, it is marked as invalid, with both the price and quantity set to zero
  * (i.e., `price = 0` and `quantity = 0`).
  *
- * Registered bids are indexed starting from `1` up to `bidCount`. Therefore, an index of `0` indicates that no bid 
+ * Registered bids are indexed starting from `1` up to `bidCount`. Therefore, an index of `0` indicates that no bid
  * exists. For each valid bid at index `i` (where `1 <= i <= bidCount`), the following two conditions must always hold:
  *
  * 1. `0 < price(i) <= Maximum Price`
@@ -26,30 +26,30 @@ import {console} from "hardhat/console.sol";
  *
  * ### Step 2: Bid ranking. O(N^2)
  *
- * - In this step, we determine the price and quantity of the bid ranked at position `k`, where `k` ranges from `0` to 
- * `bidCount - 1`. The bid ranked at position `0` is the highest-ranked bid, which is determined based on the selected 
- * ranking criteria. The ranking is strict, meaning no two bids can share the same rank. To achieve this, the bid 
+ * - In this step, we determine the price and quantity of the bid ranked at position `k`, where `k` ranges from `0` to
+ * `bidCount - 1`. The bid ranked at position `0` is the highest-ranked bid, which is determined based on the selected
+ * ranking criteria. The ranking is strict, meaning no two bids can share the same rank. To achieve this, the bid
  * set is provided with a strict order relation, ensuring a clear distinction between each bid's position in the ranking.
  *
- * - The final list of ranked bids is constructed through an iterative process. Specifically, the bid at index `k+1` is 
- * inserted into an existing list of ranked bids of length `k`, resulting in a new list of length `k+1`. During each 
- * insertion, the bid is placed in its correct position, ensuring that the relationship `Bid(k) > Bid(k+1)` holds true 
+ * - The final list of ranked bids is constructed through an iterative process. Specifically, the bid at index `k+1` is
+ * inserted into an existing list of ranked bids of length `k`, resulting in a new list of length `k+1`. During each
+ * insertion, the bid is placed in its correct position, ensuring that the relationship `Bid(k) > Bid(k+1)` holds true
  * according to the selected comparison criteria.
  *
- * - The comparison function used to rank bids depends on two factors: the bid price and the auction engine's specified 
+ * - The comparison function used to rank bids depends on two factors: the bid price and the auction engine's specified
  * tie-breaking rule. This ensures that bids are ranked in a consistent and predictable manner.
  *
- * - Finally, the computational complexity of this bid ranking operation is `N(N-1)/2 = O(N^2)`, where `N` represents the 
- * total number of bids. This complexity arises from the need to perform pairwise comparisons and insert each bid into the 
+ * - Finally, the computational complexity of this bid ranking operation is `N(N-1)/2 = O(N^2)`, where `N` represents the
+ * total number of bids. This complexity arises from the need to perform pairwise comparisons and insert each bid into the
  * correct position within the sorted list.
  *
  * ### Step 3: Ranked bid won quantity and uniform price calculation. O(N)
  *
- * - In the third step, we determine the final quantity for the bid ranked at position `k`, where `k` ranges from `0` to 
- * `bidCount - 1`, as well as the auction's final uniform price. A winning bid will have a strictly positive quantity, 
- * while a losing bid will have a quantity of zero. 
+ * - In the third step, we determine the final quantity for the bid ranked at position `k`, where `k` ranges from `0` to
+ * `bidCount - 1`, as well as the auction's final uniform price. A winning bid will have a strictly positive quantity,
+ * while a losing bid will have a quantity of zero.
  *
- * - Since the bids are ranked in strict order, the quantity for each winning bid can be determined deterministically, 
+ * - Since the bids are ranked in strict order, the quantity for each winning bid can be determined deterministically,
  * without the need for tie-breaking.
  *
  * - The uniform price is calculated as the price of the lowest winning bid.
@@ -58,7 +58,7 @@ import {console} from "hardhat/console.sol";
  *
  * ### Step 4: Inverting ranking to index vector. O(N)
  *
- * - In this final step, we invert the ranking of the bids to produce an index vector, where the position in the vector 
+ * - In this final step, we invert the ranking of the bids to produce an index vector, where the position in the vector
  * corresponds to the original index of the bid in the ranked list.
  */
 contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine {

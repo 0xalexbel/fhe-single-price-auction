@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { Test } from "forge-std/src/Test.sol";
+import {Test} from "forge-std/src/Test.sol";
 
-import { einput, euint64 } from "fhevm/lib/TFHE.sol";
+import {einput, euint64} from "fhevm/lib/TFHE.sol";
 
-import { FhevmDebug } from "forge-fhevm/src/FhevmDebug.sol";
-import { FFhevm } from "forge-fhevm/src/FFhevm.sol";
+import {FhevmDebug} from "forge-fhevm/src/FhevmDebug.sol";
+import {FFhevm} from "forge-fhevm/src/FFhevm.sol";
 
-import { Signers } from "../Signers.sol";
-import { MyConfidentialERC20 } from "../../../contracts/MyConfidentialERC20.sol";
+import {Signers} from "../Signers.sol";
+import {MyConfidentialERC20} from "../../../contracts/MyConfidentialERC20.sol";
 
 // solhint-disable func-name-mixedcase
 contract MyConfidentialERC20Test is Test {
@@ -103,12 +103,10 @@ contract MyConfidentialERC20Test is Test {
         vm.assertEq(balanceBob, 0);
     }
 
-    function reencryptU64(
-        euint64 handle,
-        address contractAddress,
-        uint256 userPk,
-        address userAddress
-    ) private returns (uint64 clearValue) {
+    function reencryptU64(euint64 handle, address contractAddress, uint256 userPk, address userAddress)
+        private
+        returns (uint64 clearValue)
+    {
         (bytes memory publicKey, bytes memory privateKey) = FFhevm.generateKeyPair();
         bytes32 eip712 = FFhevm.createEIP712Digest(publicKey, contractAddress);
         bytes memory signature = FFhevm.sign(eip712, userPk);

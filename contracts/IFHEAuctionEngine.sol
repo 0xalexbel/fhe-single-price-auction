@@ -12,7 +12,7 @@ interface IFHEAuctionEngine {
     function removeBid(address bidder) external;
     function canDecryptUniformPrice() external view returns (bool);
     function getUniformPrice() external view returns (euint256);
-    function validatedPriceAndWonQuantityById(uint16 id) external view returns(euint256, euint256);
+    function validatedPriceAndWonQuantityById(uint16 id) external view returns (euint256, euint256);
     function totalQuantity() external view returns (uint256);
     function getBidCount() external view returns (uint16);
     function getBidById(uint16 id) external view returns (euint256 price, euint256 quantity);

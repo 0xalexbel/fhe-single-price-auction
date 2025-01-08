@@ -3,6 +3,4 @@ pragma solidity ^0.8.24;
 
 import {ITimedAuction} from "./ITimedAuction.sol";
 
-interface IFHEAuctionBase is ITimedAuction  {
-}
-
+interface IFHEAuctionBase is ITimedAuction {}

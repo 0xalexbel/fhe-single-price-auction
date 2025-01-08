@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.24;
 
-import { Vm } from "forge-std/src/Vm.sol";
+import {Vm} from "forge-std/src/Vm.sol";
 
-import { FFhevm } from "forge-fhevm/src/FFhevm.sol";
+import {FFhevm} from "forge-fhevm/src/FFhevm.sol";
 
 contract Signers {
     uint256 public alice;
