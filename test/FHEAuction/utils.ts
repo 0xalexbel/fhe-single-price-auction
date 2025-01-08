@@ -245,6 +245,7 @@ export abstract class FHEAuctionMockTestCtx {
 
     for (let i = 0; i < max; ++i) {
       await this.engine.iterBidsValidation(1n, { gasLimit: 250_000n });
+      awaitCoprocessor();
       expect(await this.engine.bidsValidationProgress()).to.equal(i + 1);
     }
 
@@ -324,9 +325,7 @@ export abstract class FHEAuctionMockTestCtx {
     return await this.auctionToken.balanceOf(signer);
   }
 
-  async paymentTokenBalanceOf(signer: HardhatEthersSigner) {
-    return await hre.ethers.provider.getBalance(signer);
-  }
+  abstract paymentTokenBalanceOf(signer: HardhatEthersSigner): Promise<bigint>;
 
   abstract depositSingle(
     bidder: HardhatEthersSigner,
@@ -408,6 +407,10 @@ export class FHEAuctionNativeMockTestCtx extends FHEAuctionMockTestCtx {
     if (stop) {
       await this.auction.connect(this.owner).stop();
     }
+  }
+
+  async paymentTokenBalanceOf(signer: HardhatEthersSigner) {
+    return await hre.ethers.provider.getBalance(signer);
   }
 
   async approvePaymentDeposit(bidder: HardhatEthersSigner, amount: bigint) {}
@@ -506,5 +509,9 @@ export class FHEAuctionERC20MockTestCtx extends FHEAuctionMockTestCtx {
         bids[i].price * bids[i].quantity
       );
     }
+  }
+
+  async paymentTokenBalanceOf(signer: HardhatEthersSigner) {
+    return await this.paymentToken.balanceOf(signer);
   }
 }

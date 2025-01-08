@@ -17,6 +17,8 @@ abi/
 trash/
 docs/
 
+TODO.md
+
 # forge-fhevm
 cache_forge
 out

@@ -17,13 +17,13 @@ const DEFAULT_TIE_BREAKING_RULE = 2n; //PriceId
 const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
+const DEFAULT_PAYMENT_TOKEN_BALANCE = 100_000_000n;
 
 describe("engine.erc20", () => {
   let ctx: FHEAuctionERC20MockTestCtx;
   let alice: HardhatEthersSigner;
   let bob: HardhatEthersSigner;
   let charlie: HardhatEthersSigner;
-  let auctionQuantity: bigint;
 
   async function fixture() {
     return deployERC20AuctionFixture(
@@ -33,7 +33,8 @@ describe("engine.erc20", () => {
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
       DEFAULT_STOPPABLE,
-      true /* start */
+      true /* start */,
+      DEFAULT_PAYMENT_TOKEN_BALANCE
     );
   }
 
@@ -43,18 +44,17 @@ describe("engine.erc20", () => {
     alice = res.alice;
     bob = res.bob;
     charlie = res.charlie;
-    auctionQuantity = DEFAULT_QUANTITY;
   });
 
   it("should return the total auction quantity", async () => {
-    expect(await ctx.auctionQuantity()).to.equal(auctionQuantity);
+    expect(await ctx.auctionQuantity()).to.equal(ctx.params.quantity);
   });
 
   it("one single bid with valid argument should be registered", async () => {
     expect(await ctx.auction.owner()).to.equal(ctx.owner);
 
     const bidPrice = 1337n;
-    const bidQuantity = auctionQuantity - 1n;
+    const bidQuantity = ctx.params.quantity - 1n;
 
     await ctx.depositSingle(alice, bidPrice * bidQuantity);
 
@@ -446,7 +446,7 @@ describe("engine.erc20", () => {
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    //await ctx.iterWonQuantities();
+    await ctx.iterWonQuantities();
   });
 
   it("N bids: p(i) = p(i+1)", async () => {
@@ -546,12 +546,13 @@ describe("engine.erc20", () => {
       { bidder: bob, id: 2n, price: 0n, quantity: 0n },
     ];
 
+    const aliceDeposit = bids[0].price * bids[0].quantity;
     const bobDeposit = (bids[1].price * bids[1].quantity) / 2n;
 
-    await ctx.deposit([bids[0]], bids[0].price * bids[0].quantity, true);
-    await ctx.deposit([bids[1]], bobDeposit, true);
+    await ctx.depositSingle(bids[0].bidder, aliceDeposit);
+    await ctx.depositSingle(bids[1].bidder, bobDeposit);
 
-    await ctx.placeBids(bids, false, true);
+    await ctx.placeBidsWithoutDeposit(bids, true);
     await ctx.iterBidsValidation();
     await ctx.iterRankedBids();
     await ctx.expectRankedBidsToEqual(rankedBids);
@@ -589,6 +590,17 @@ describe("engine.erc20", () => {
     );
     expect(bobPaymentBalanceAfter - bobPaymentBalanceBefore).to.equal(
       bobDeposit - DEFAULT_PAYMENT_PENALTY
+    );
+  });
+
+  it("Deposit from bidder with insufficient payment token balance should revert.", async () => {
+    await ctx.approvePaymentDeposit(bob, DEFAULT_PAYMENT_TOKEN_BALANCE);
+    await ctx.paymentToken.connect(bob).transfer(alice, 100n);
+    await expect(
+      ctx.depositSingle(bob, DEFAULT_PAYMENT_TOKEN_BALANCE)
+    ).to.be.revertedWithCustomError(
+      ctx.paymentToken,
+      "ERC20InsufficientBalance"
     );
   });
 });

@@ -13,7 +13,7 @@ contract FHEAuctionEngineMock is FHEAuctionEngine {
         uint16 n = getBidCount();
         for (uint16 i = 0; i < n; ++i) {
             // external call is better for coprocessorUtils.ts
-            this.allowAccountToAccessBidWithIndex(i, msg.sender);
+            this.allowAccountToAccessBidByIndex(i, msg.sender);
         }
     }
 
@@ -21,7 +21,7 @@ contract FHEAuctionEngineMock is FHEAuctionEngine {
         uint16 n = getBidCount();
         for (uint16 i = 0; i < n; ++i) {
             // external call is better for coprocessorUtils.ts
-            this.allowAccountToAccessBidWithRank(i, msg.sender);
+            this.allowAccountToAccessBidByRank(i, msg.sender);
         }
     }
 
@@ -38,7 +38,7 @@ contract FHEAuctionEngineMock is FHEAuctionEngine {
         TFHE.allow(pu, account);
     }
 
-    function allowAccountToAccessBidWithRank(uint16 rank, address account) public {
+    function allowAccountToAccessBidByRank(uint16 rank, address account) public {
         require(address(this) == msg.sender, "Sender is not this");
         (euint16 id, euint256 price, euint256 quantity) = getBidByRank(rank);
 
@@ -51,7 +51,7 @@ contract FHEAuctionEngineMock is FHEAuctionEngine {
         TFHE.allow(quantity, account);
     }
 
-    function allowAccountToAccessBidWithIndex(uint16 idx, address account) public {
+    function allowAccountToAccessBidByIndex(uint16 idx, address account) public {
         require(address(this) == msg.sender, "Sender is not this");
         (, euint256 price, euint256 quantity) = getBidByIndex(idx);
 

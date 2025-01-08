@@ -444,7 +444,7 @@ describe("engine.native", () => {
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    //await ctx.iterWonQuantities();
+    await ctx.iterWonQuantities();
   });
 
   it("N bids: p(i) = p(i+1)", async () => {
@@ -587,5 +587,10 @@ describe("engine.native", () => {
     expect(bobPaymentBalanceAfter - bobPaymentBalanceBefore).to.equal(
       bobDeposit - DEFAULT_PAYMENT_PENALTY
     );
+  });
+
+  it("Deposit from bidder with insufficient payment token balance should revert.", async () => {
+    const bobBalance = await ctx.paymentTokenBalanceOf(bob);
+    await expect(ctx.depositSingle(bob, bobBalance + 1n)).to.be.rejected;
   });
 });

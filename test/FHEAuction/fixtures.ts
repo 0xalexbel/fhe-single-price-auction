@@ -115,7 +115,8 @@ export async function deployERC20AuctionFixture(
   minimumPaymentDeposit: bigint,
   paymentPenalty: bigint,
   stoppable: boolean,
-  start: boolean
+  start: boolean,
+  paymentTokenDefaultBalance: bigint
 ) {
   const [
     dummy, //owner should not be signers[0]
@@ -143,9 +144,15 @@ export async function deployERC20AuctionFixture(
   );
   const paymentTokenAddr = await paymentToken.getAddress();
 
-  await paymentToken.connect(paymentTokenOwner).transfer(alice, 100_000_000);
-  await paymentToken.connect(paymentTokenOwner).transfer(bob, 100_000_000);
-  await paymentToken.connect(paymentTokenOwner).transfer(charlie, 100_000_000);
+  await paymentToken
+    .connect(paymentTokenOwner)
+    .transfer(alice, paymentTokenDefaultBalance);
+  await paymentToken
+    .connect(paymentTokenOwner)
+    .transfer(bob, paymentTokenDefaultBalance);
+  await paymentToken
+    .connect(paymentTokenOwner)
+    .transfer(charlie, paymentTokenDefaultBalance);
 
   const auction: FHEAuctionERC20Mock = await hre.ethers.deployContract(
     "FHEAuctionERC20Mock",

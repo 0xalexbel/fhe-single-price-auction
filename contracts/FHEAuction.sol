@@ -6,6 +6,8 @@ import "fhevm/gateway/GatewayCaller.sol";
 import {FHEAuctionBase} from "./FHEAuctionBase.sol";
 import {IFHEAuction} from "./IFHEAuction.sol";
 
+import {console} from "hardhat/console.sol";
+
 /**
  * @dev Base abstract contract for implementing a Single Price Auction using a non-encrypted payment token.
  *

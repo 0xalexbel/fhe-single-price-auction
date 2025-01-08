@@ -316,7 +316,7 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
      * @return quantity The encrypted quantity of the bid.
      */
     function getBidByRank(uint16 rank) public view returns (euint16 id, euint256 price, euint256 quantity) {
-        if (rank < _rankedBidCount) {
+        if (rank >= _rankedBidCount) {
             revert RankOutOfBounds(rank, _rankedBidCount);
         }
 

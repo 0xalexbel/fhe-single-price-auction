@@ -1,14 +1,12 @@
 - BEAUCOUP PLUS DE TESTS
-- Generer une doc
 - IMPORTANT! Tie Break rules
 - IMPORTANT! call engine.close when time is up
+- Minimum Quantity option
+- Minimum Price option
 - Measure Gas
 - Rename ABid struct
 - extensions
   - FHEAuctionEncryptedERC20
-- Comments
 - balanceOf() -> euint256 instead
 - Factories
 - Test eERC20
-- Minimum Quantity option
-- Minimum Price option

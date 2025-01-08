@@ -10,6 +10,7 @@ const DEFAULT_TIE_BREAKING_RULE = 2n; //PriceId
 const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
+const DEFAULT_PAYMENT_TOKEN_BALANCE = 100_000_000n;
 
 describe("cancel.erc20", () => {
   let ctx: FHEAuctionERC20MockTestCtx;
@@ -25,7 +26,8 @@ describe("cancel.erc20", () => {
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
       DEFAULT_STOPPABLE,
-      true /* start */
+      true /* start */,
+      DEFAULT_PAYMENT_TOKEN_BALANCE
     );
   }
 
