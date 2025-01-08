@@ -15,14 +15,14 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     {}
 
     /**
-     * @dev Returns the value of payment tokens deposited by `bidder`
+     * @notice Returns the value of payment tokens deposited by `bidder`
      */
     function balanceOf(address bidder) public view returns (uint256) {
         return _balances[bidder];
     }
 
     /**
-     * @dev See {FHEAuctionBase-_canClaim}.
+     * @notice See {FHEAuctionBase-_canClaim}.
      *
      * Additionnal conditions:
      *
@@ -36,6 +36,9 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
         return super._canClaim(bidder);
     }
 
+    /**
+     * @notice See {FHEAuctionBase-_claim}.
+     */
     function _claim(address bidder, uint16 /*id*/, euint256 validatedPrice, euint256 wonQuantity) internal virtual override {
         uint256[] memory cts = new uint256[](2);
         cts[0] = Gateway.toUint256(validatedPrice);
@@ -110,11 +113,17 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
         }
     }
 
+    /**
+     * @notice See {FHEAuctionBase-_bid}.
+     */
     function _bid(address bidder, einput inPrice, einput inQuantity, bytes calldata inputProof) internal virtual override {
         _requireSufficientBalance(_balances[bidder]);
         super._bid(bidder, inPrice, inQuantity, inputProof);
     }
 
+    /**
+     * @notice See {FHEAuctionBase-_cancelBid}.
+     */
     function _cancelBid(address bidder) internal virtual override {
         _withdrawPayment(bidder, _balances[bidder]);
         super._cancelBid(bidder);
@@ -173,6 +182,13 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
         _balances[bidder] += amount;
     }
 
+    /**
+     * @notice Abstract function
+     */
     function _transferPaymentTokenTo(address to, uint256 amount) internal virtual;
+
+    /**
+     * @notice Abstract function
+     */
     function _paymentTokenBalanceOf(address account) internal view virtual returns (uint256);
 }

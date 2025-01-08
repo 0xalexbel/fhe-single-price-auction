@@ -131,7 +131,7 @@ abstract contract FHEAuctionBase is
      * @param beneficiary_ Address of the auction beneficiary who will receive the proceeds.
      * @param auctionToken_ Address of the {IERC20} token being auctioned.
      * @param auctionQuantity_ Total quantity of tokens to be auctioned.
-     * @param tieBreakingRule_ Tie-breaking rule used by the auction engine to resolve winning ties..
+     * @param tieBreakingRule_ Tie-breaking rule used by the auction engine to resolve winning ties.
      */
     function initialize(
         address engine_,
@@ -174,6 +174,17 @@ abstract contract FHEAuctionBase is
         IFHEAuctionEngine(engine_).initialize(auctionQuantity_, tieBreakingRule_);
     }
 
+    /**
+     * @notice Starts the auction. (see `TimedAuction._start`).
+     *
+     * @notice Requirements:
+     * - The auction must be initialized.
+     * - The auction must not have already started.
+     * - The caller must be the auction contract owner.
+     *
+     * @param durationInSeconds The duration of the auction in seconds.
+     * @param stoppable Indicates whether the auction can be manually stopped.
+     */
     function start(uint256 durationInSeconds, bool stoppable) external onlyOwner nonReentrant {
         _start(durationInSeconds, stoppable);
     }
@@ -286,7 +297,7 @@ abstract contract FHEAuctionBase is
         TFHE.allowTransient(newBid.quantity, engineAddr);
 
         // will revert if `bidder` has already placed a bid
-        IFHEAuctionEngine(_engine).bid(bidder, newBid.price, newBid.quantity);
+        IFHEAuctionEngine(_engine).addBid(bidder, newBid.price, newBid.quantity);
 
         TFHE.allow(newBid.price, bidder);
         TFHE.allow(newBid.quantity, bidder);
@@ -460,7 +471,7 @@ abstract contract FHEAuctionBase is
             price: euint256.wrap(0),
             quantity: euint256.wrap(0)
         });
-        IFHEAuctionEngine(_engine).removeBidder(bidder);
+        IFHEAuctionEngine(_engine).removeBid(bidder);
     }
 
     /**

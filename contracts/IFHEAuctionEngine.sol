@@ -8,8 +8,8 @@ interface IFHEAuctionEngine {
     function initialize(uint256 totalQuantity, uint8 tieBreakingRule) external;
     function close() external;
     function bidderId(address bidder) external view returns (uint16);
-    function removeBidder(address bidder) external;
-    function bid(address bidder, euint256 inPrice, euint256 inQuantity) external;
+    function addBid(address bidder, euint256 inPrice, euint256 inQuantity) external;
+    function removeBid(address bidder) external;
     function canDecryptUniformPrice() external view returns (bool);
     function getUniformPrice() external view returns (euint256);
     function validatedPriceAndWonQuantityById(uint16 id) external view returns(euint256, euint256);
