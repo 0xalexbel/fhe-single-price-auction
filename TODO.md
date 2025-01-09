@@ -10,3 +10,4 @@
 - balanceOf() -> euint256 instead
 - Factories
 - Test eERC20
+- TotalQuantity should be encrypted ?

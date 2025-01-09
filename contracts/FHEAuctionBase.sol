@@ -265,6 +265,13 @@ abstract contract FHEAuctionBase is
     }
 
     /**
+     * @notice Returns the maximum allowable price for each bid.
+     */
+    function maximumPrice() public view returns (uint256) {
+        return IFHEAuctionEngine(_engine).maximumPrice();
+    }
+
+    /**
      * @notice Returns the total number of bidders.
      */
     function bidCount() public view returns (uint256) {

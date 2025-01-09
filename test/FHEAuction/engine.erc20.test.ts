@@ -18,6 +18,7 @@ const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
 const DEFAULT_PAYMENT_TOKEN_BALANCE = 100_000_000n;
+const DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY = 1_000_000_000_000n;
 
 describe("engine.erc20", () => {
   let ctx: FHEAuctionERC20MockTestCtx;
@@ -34,7 +35,8 @@ describe("engine.erc20", () => {
       DEFAULT_PAYMENT_PENALTY,
       DEFAULT_STOPPABLE,
       true /* start */,
-      DEFAULT_PAYMENT_TOKEN_BALANCE
+      DEFAULT_PAYMENT_TOKEN_BALANCE,
+      DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY
     );
   }
 
@@ -602,5 +604,55 @@ describe("engine.erc20", () => {
       ctx.paymentToken,
       "ERC20InsufficientBalance"
     );
+  });
+});
+
+describe("engine.erc20.max", () => {
+  let ctx: FHEAuctionERC20MockTestCtx;
+  let alice: HardhatEthersSigner;
+  let bob: HardhatEthersSigner;
+  let charlie: HardhatEthersSigner;
+
+  async function fixture() {
+    return deployERC20AuctionFixture(
+      DEFAULT_QUANTITY,
+      DEFAULT_DURATION,
+      DEFAULT_TIE_BREAKING_RULE,
+      DEFAULT_MIN_PAYMENT_DEPOSIT,
+      DEFAULT_PAYMENT_PENALTY,
+      DEFAULT_STOPPABLE,
+      true /* start */,
+      115792089237316195423570985008687907853269984665640564039457584007913129639935n /
+        100n,
+      115792089237316195423570985008687907853269984665640564039457584007913129639935n
+    );
+  }
+
+  beforeEach(async function () {
+    const res = await loadFixture(fixture);
+    ctx = res.ctx;
+    alice = res.alice;
+    bob = res.bob;
+    charlie = res.charlie;
+  });
+
+  it("3 bids validation, bid price higher than maximum price should be zero", async () => {
+    const maxPrice = await ctx.auction.maximumPrice();
+
+    const bids: FHEBids = [
+      { bidder: alice, id: 1n, price: maxPrice + 1n, quantity: 1n },
+      { bidder: bob, id: 2n, price: maxPrice, quantity: 2n },
+      { bidder: charlie, id: 3n, price: maxPrice - 1n, quantity: 3n },
+    ];
+
+    const validatedBids: FHEBids = [
+      { bidder: alice, id: 1n, price: 0n, quantity: 0n },
+      { bidder: bob, id: 2n, price: maxPrice, quantity: 2n },
+      { bidder: charlie, id: 3n, price: maxPrice - 1n, quantity: 3n },
+    ];
+
+    await ctx.placeBidsWithDeposit(bids, true);
+    await ctx.iterBidsValidation();
+    await ctx.expectBidsToEqual(validatedBids);
   });
 });

@@ -13,6 +13,7 @@ const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
 const DEFAULT_PAYMENT_TOKEN_BALANCE = 100_000_000n;
+const DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY = 1_000_000_000_000n;
 
 describe("deploy.erc20", () => {
   let ctx: FHEAuctionERC20MockTestCtx;
@@ -30,7 +31,8 @@ describe("deploy.erc20", () => {
       DEFAULT_PAYMENT_PENALTY,
       DEFAULT_STOPPABLE,
       false /* start */,
-      DEFAULT_PAYMENT_TOKEN_BALANCE
+      DEFAULT_PAYMENT_TOKEN_BALANCE,
+      DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY
     );
   }
 

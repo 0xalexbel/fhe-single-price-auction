@@ -12,6 +12,7 @@ import {
   FHEAuctionNativeMockTestCtx,
   FHEAuctionParams,
 } from "./utils";
+import { expect } from "chai";
 
 export async function deployNativeAuctionFixture(
   quantity: bigint,
@@ -116,7 +117,8 @@ export async function deployERC20AuctionFixture(
   paymentPenalty: bigint,
   stoppable: boolean,
   start: boolean,
-  paymentTokenDefaultBalance: bigint
+  paymentTokenDefaultBalance: bigint,
+  paymentTokenTotalSupply: bigint
 ) {
   const [
     dummy, //owner should not be signers[0]
@@ -143,6 +145,10 @@ export async function deployERC20AuctionFixture(
     paymentTokenOwner
   );
   const paymentTokenAddr = await paymentToken.getAddress();
+
+  await paymentToken
+    .connect(paymentTokenOwner)
+    .mint(paymentTokenOwner, paymentTokenTotalSupply);
 
   await paymentToken
     .connect(paymentTokenOwner)

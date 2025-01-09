@@ -11,6 +11,7 @@ const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
 const DEFAULT_PAYMENT_TOKEN_BALANCE = 100_000_000n;
+const DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY = 1_000_000_000_000n;
 
 describe("cancel.erc20", () => {
   let ctx: FHEAuctionERC20MockTestCtx;
@@ -27,7 +28,8 @@ describe("cancel.erc20", () => {
       DEFAULT_PAYMENT_PENALTY,
       DEFAULT_STOPPABLE,
       true /* start */,
-      DEFAULT_PAYMENT_TOKEN_BALANCE
+      DEFAULT_PAYMENT_TOKEN_BALANCE,
+      DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY
     );
   }
 
@@ -54,5 +56,59 @@ describe("cancel.erc20", () => {
     expect(await ctx.auction.bidCount()).to.equal(1n);
     await ctx.cancelBid(charlie);
     expect(await ctx.auction.bidCount()).to.equal(0n);
+  });
+
+  it("3 bids, cancel first bid should succeed", async () => {
+    const bids: FHEBids = [
+      { bidder: alice, id: 1n, price: 1234n, quantity: 1n },
+      { bidder: bob, id: 2n, price: 1235n, quantity: 2n },
+      { bidder: charlie, id: 3n, price: 1236n, quantity: 3n },
+    ];
+
+    const expectedBids: FHEBids = [
+      { bidder: bob, id: 2n, price: 1235n, quantity: 2n },
+      { bidder: charlie, id: 3n, price: 1236n, quantity: 3n },
+    ];
+
+    await ctx.placeBids(bids, true, false);
+    await ctx.cancelBid(alice);
+    await ctx.allowBids();
+    await ctx.expectBidsToEqual(expectedBids);
+  });
+
+  it("3 bids, cancel second bid should succeed", async () => {
+    const bids: FHEBids = [
+      { bidder: alice, id: 1n, price: 1234n, quantity: 1n },
+      { bidder: bob, id: 2n, price: 1235n, quantity: 2n },
+      { bidder: charlie, id: 3n, price: 1236n, quantity: 3n },
+    ];
+
+    const expectedBids: FHEBids = [
+      { bidder: alice, id: 1n, price: 1234n, quantity: 1n },
+      { bidder: charlie, id: 3n, price: 1236n, quantity: 3n },
+    ];
+
+    await ctx.placeBids(bids, true, false);
+    await ctx.cancelBid(bob);
+    await ctx.allowBids();
+    await ctx.expectBidsToEqual(expectedBids);
+  });
+
+  it("3 bids, cancel third bid should succeed", async () => {
+    const bids: FHEBids = [
+      { bidder: alice, id: 1n, price: 1234n, quantity: 1n },
+      { bidder: bob, id: 2n, price: 1235n, quantity: 2n },
+      { bidder: charlie, id: 3n, price: 1236n, quantity: 3n },
+    ];
+
+    const expectedBids: FHEBids = [
+      { bidder: alice, id: 1n, price: 1234n, quantity: 1n },
+      { bidder: bob, id: 2n, price: 1235n, quantity: 2n },
+    ];
+
+    await ctx.placeBids(bids, true, false);
+    await ctx.cancelBid(charlie);
+    await ctx.allowBids();
+    await ctx.expectBidsToEqual(expectedBids);
   });
 });
