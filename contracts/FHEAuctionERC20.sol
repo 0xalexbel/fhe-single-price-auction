@@ -6,7 +6,7 @@ import {FHEAuction} from "./FHEAuction.sol";
 import {FHEAuctionBase} from "./FHEAuctionBase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract FHEAuctionERC20 is FHEAuction {
+abstract contract FHEAuctionERC20 is FHEAuction {
     IERC20 private immutable _paymentToken;
 
     /**
@@ -81,15 +81,19 @@ contract FHEAuctionERC20 is FHEAuction {
      * @param amount The amount of ERC20 tokens to be transferred.
      */
     function _transferPaymentTokenFrom(address bidder, uint256 amount) internal {
-        uint256 balanceBefore = _paymentToken.balanceOf(address(this));
-        bool succeeded = _paymentToken.transferFrom(bidder, address(this), amount);
-        if (!succeeded) {
-            revert DepositFailed();
+        if (amount == 0) {
+            return;
         }
-        uint256 balanceAfter = _paymentToken.balanceOf(address(this));
+        IERC20 pToken = _paymentToken;
+        uint256 balanceBefore = pToken.balanceOf(address(this));
+        bool succeeded = pToken.transferFrom(bidder, address(this), amount);
+        if (!succeeded) {
+            revert DepositFailed(address(pToken), bidder, amount);
+        }
+        uint256 balanceAfter = pToken.balanceOf(address(this));
 
         if (balanceAfter - balanceBefore != amount) {
-            revert DepositFailed();
+            revert DepositFailed(address(pToken), bidder, amount);
         }
     }
 

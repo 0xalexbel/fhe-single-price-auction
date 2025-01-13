@@ -1,3 +1,4 @@
+- Add TESTS for claimByRank + explanations gain N^2
 - BEAUCOUP PLUS DE TESTS
 - IMPORTANT! Tie Break rules
 - IMPORTANT! call engine.close when time is up
@@ -11,3 +12,4 @@
 - Factories
 - Test eERC20
 - TotalQuantity should be encrypted ?
+- RPC url

@@ -92,7 +92,7 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       accounts: {
-        count: 10,
+        count: 15,
         mnemonic,
         path: "m/44'/60'/0'/0",
       },

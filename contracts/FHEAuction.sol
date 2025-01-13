@@ -19,6 +19,7 @@ import {console} from "hardhat/console.sol";
 abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     mapping(address account => uint256) private _balances;
     mapping(uint256 requestID => address bidder) private _requestIDToBidder;
+    mapping(uint256 requestID => uint16 rank) private _requestIDToRank;
 
     /**
      * @notice Returns the value of payment tokens deposited by `bidder`
@@ -41,6 +42,19 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     }
 
     /**
+     * @dev See {FHEAuctionBase-_canClaimByRank}.
+     * @dev Additionnal conditions:
+     * - The final uniform price must have been decrypted.
+     */
+    function _canBlindClaim(uint16 rank) internal view virtual override(FHEAuctionBase) returns (bool) {
+        if (clearUniformPrice() == 0) {
+            // the auction uniform price is not yet decrypted
+            return false;
+        }
+        return super._canBlindClaim(rank);
+    }
+
+    /**
      * @dev See {FHEAuctionBase-_claim}.
      */
     function _claim(address bidder, uint16, /*id*/ euint256 validatedPrice, euint256 wonQuantity)
@@ -58,26 +72,70 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     }
 
     /**
-     * @dev Callback function to process the results of a requested claim. This function can only be called by the
-     * fhEVM Gateway.
-     * It handles the transfer of payments as follows:
-     * - Transfers the payment (including any penalty fees for invalid bids) to the auction beneficiary.
-     * - Transfers any remaining payment token balance to the bidder.
-     *
-     * @param requestID The request ID from the fhEVM Gateway.
-     * @param clearValidatedPrice The decrypted validated price of the auction provided by the Gateway. If this value is
-     * zero, the bid is considered invalid and subject to a penalty fee.
-     * @param clearWonQuantity The decrypted final quantity won by the bidder in the auction, provided by the Gateway.
+     * @dev see {_callbackDecrypt}
+     * @dev This function can only be called by the fhEVM Gateway.
      */
     function callbackDecryptWonQuantity(uint256 requestID, uint256 clearValidatedPrice, uint256 clearWonQuantity)
         external
         onlyGateway
     {
-        address bidder = _requestIDToBidder[requestID];
-        uint256 uniformPrice = clearUniformPrice();
+        _callbackDecrypt(_requestIDToBidder[requestID], clearValidatedPrice, clearWonQuantity);
+    }
 
+    /**
+     * @dev See {FHEAuctionBase-_blindClaimByRank}.
+     */
+    function _blindClaim(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity)
+        internal
+        virtual
+        override
+    {
+        uint256[] memory cts = new uint256[](3);
+        cts[0] = Gateway.toUint256(id);
+        cts[1] = Gateway.toUint256(validatedPrice);
+        cts[2] = Gateway.toUint256(wonQuantity);
+        uint256 requestID = Gateway.requestDecryption(
+            cts, this.callbackDecryptRankedWonQuantity.selector, 0, block.timestamp + 100, false
+        );
+
+        _requestIDToRank[requestID] = rank;
+    }
+
+    /**
+     * @dev see {_callbackDecrypt}
+     * @dev This function can only be called by the fhEVM Gateway.
+     */
+    function callbackDecryptRankedWonQuantity(
+        uint256 requestID,
+        uint16 clearId,
+        uint256 clearValidatedPrice,
+        uint256 clearWonQuantity
+    ) external onlyGateway {
+        // reverts if already completed
+        _markBlindClaimCompleted(_requestIDToRank[requestID]);
+
+        _callbackDecrypt(_getBidderById(clearId), clearValidatedPrice, clearWonQuantity);
+    }
+
+    /**
+     * @dev Callback function to process the results of a requested claim.
+     * It handles the transfer of payments as follows:
+     * - Transfers the payment (including any penalty fees for invalid bids) to the auction beneficiary.
+     * - Transfers any remaining payment token balance to the bidder.
+     *
+     * @param bidder The bidder address.
+     * @param clearValidatedPrice The decrypted validated price of the auction provided by the Gateway. If this value is
+     * zero, the bid is considered invalid and subject to a penalty fee.
+     * @param clearWonQuantity The decrypted final quantity won by the bidder in the auction, provided by the Gateway.
+     */
+    function _callbackDecrypt(address bidder, uint256 clearValidatedPrice, uint256 clearWonQuantity) internal {
         // Debug
         require(bidder != address(0), "Panic: bidder == 0");
+
+        // reverts if already completed
+        _markClaimCompleted(bidder);
+
+        uint256 uniformPrice = clearUniformPrice();
 
         // Debug
         require(uniformPrice > 0, "Panic: uniformPrice == 0");
@@ -86,8 +144,6 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
             // Debug
             require(clearWonQuantity == 0, "Panic: clearValidatedPrice == 0 && clearWonQuantity != 0");
         }
-
-        _markClaimCompleted(bidder);
 
         if (clearWonQuantity > 0) {
             uint256 bidderDueAmount = uniformPrice * clearWonQuantity;

@@ -593,4 +593,70 @@ describe("engine.native", () => {
     const bobBalance = await ctx.paymentTokenBalanceOf(bob);
     await expect(ctx.depositSingle(bob, bobBalance + 1n)).to.be.rejected;
   });
+
+  it("BBB Gas Cost", async () => {
+    const signers = await hre.ethers.getSigners();
+    const n: number = signers.length;
+
+    const p0 = 1234n;
+    const bids: FHEBids = [];
+    const rankedBids: FHEBids = [];
+    for (let i = 0; i < n; ++i) {
+      bids.push({
+        bidder: signers[i],
+        id: BigInt(i + 1),
+        price: p0,
+        quantity: 1n + BigInt(i),
+      });
+      rankedBids.push({
+        bidder: signers[i],
+        id: BigInt(i + 1),
+        price: p0,
+        quantity: 1n + BigInt(i),
+      });
+    }
+
+    await ctx.bidDepositStop(bids);
+    await ctx.iterBidsValidation();
+
+    await ctx.engine.iterRankedBids(1n); //N(N-1)/2
+    await ctx.engine.iterRankedBids(9n); //N(N-1)/2
+    // First = 436705
+    // 1 = 365701
+    // 2 = 629616
+    // 3 = 914949
+    // 4 = 1119731
+    // 5 = 1353290
+    // 6 = 1638624
+    // 7 = 1843409
+    // 8 = 2048194
+    // 9 = 2281755
+    // await ctx.iterRankedBids();
+    // await ctx.expectRankedBidsToEqual(rankedBids);
+    //await ctx.iterRankedWonQuantities();
+
+    // 1: 112756
+    // 2: 316184 (203 428)
+    // 3: 468863 (152 679)
+    // 4: 621543 (152 680)
+    // 5: 774223 (152 680)
+    //await ctx.engine.iterRankedWonQuantities(1n);
+    // Cost
+    // 255069 (1) (begin=13331)(end=56550)
+    // 407748 (2) 407748-255069=152679 (begin=13331)(end=56550)
+    // 560428 (3) 560428-407748=152680
+    // 713108 (4) 713108-560428=152680
+    // 865788 (5) 865788-713108=152680
+    // k > 1
+    // gas = 13331 (begin) + 56550 (end) + 32507 (loop init) + k*152680
+    // gas = 102388 + k*152680
+    //await ctx.engine.iterRankedWonQuantities(5n);
+    //awaitCoprocessor();
+    //32507+13331+56550
+
+    // const uniformPrice = await ctx.getClearUniformPrice();
+    // expect(uniformPrice).to.equal(p0);
+
+    // await ctx.engine.iterWonQuantitiesAtId(1n, 2n);
+  });
 });

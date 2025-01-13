@@ -7,7 +7,7 @@ import {FHEAuctionBase} from "./FHEAuctionBase.sol";
 
 import {console} from "hardhat/console.sol";
 
-contract FHEAuctionNative is FHEAuction {
+abstract contract FHEAuctionNative is FHEAuction {
     /**
      * @dev See {FHEAuctionBase-constructor}
      */

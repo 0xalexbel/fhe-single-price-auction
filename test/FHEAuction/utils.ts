@@ -57,6 +57,10 @@ export type FHEBid = {
   id: bigint;
   price: bigint;
   quantity: bigint;
+  startPaymentBalance?: bigint;
+  endPaymentBalance?: bigint;
+  paymentDeposit?: bigint;
+  wonQuantity?: bigint;
 };
 
 export type FHEBids = Array<FHEBid>;
@@ -316,26 +320,75 @@ export abstract class FHEAuctionMockTestCtx {
     }
   }
 
-  async depositSingleMinimum(bidder: HardhatEthersSigner) {
-    await this.approvePaymentDeposit(bidder, this.params.minimumPaymentDeposit);
-    await this.depositSingle(bidder, this.params.minimumPaymentDeposit);
+  async depositSingleMinimum(bidder: HardhatEthersSigner, approve: boolean) {
+    await this.depositSingle(
+      bidder,
+      this.params.minimumPaymentDeposit,
+      approve
+    );
   }
 
   async auctionTokenBalanceOf(signer: HardhatEthersSigner) {
     return await this.auctionToken.balanceOf(signer);
   }
 
+  async approvePaymentDeposits(bids: FHEBids) {
+    for (let i = 0; i < bids.length; ++i) {
+      const d = bids[i].paymentDeposit ?? bids[i].price * bids[i].quantity;
+      await this.approvePaymentDeposit(bids[i].bidder, d);
+    }
+  }
+
   abstract paymentTokenBalanceOf(signer: HardhatEthersSigner): Promise<bigint>;
 
   abstract depositSingle(
     bidder: HardhatEthersSigner,
-    amount: bigint
+    amount: bigint,
+    approve: boolean
   ): Promise<void>;
 
   abstract approvePaymentDeposit(
     bidder: HardhatEthersSigner,
     amount: bigint
   ): Promise<void>;
+
+  async expectPaymentBalanceToEqualStart(bids: FHEBids) {
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.paymentTokenBalanceOf(bids[i].bidder)).to.equal(
+        bids[i].startPaymentBalance
+      );
+    }
+  }
+
+  async expectPaymentBalanceToEqualEnd(
+    bids: FHEBids,
+    expectedUniformPrice: bigint
+  ) {
+    for (let i = 0; i < bids.length; ++i) {
+      const e =
+        bids[i].endPaymentBalance ??
+        bids[i].startPaymentBalance! -
+          bids[i].wonQuantity! * expectedUniformPrice;
+      expect(await this.paymentTokenBalanceOf(bids[i].bidder)).to.equal(e);
+    }
+  }
+
+  async expectPaymentBalancePlusDepositToEqual(bids: FHEBids) {
+    for (let i = 0; i < bids.length; ++i) {
+      const b = await this.paymentTokenBalanceOf(bids[i].bidder);
+      const d = bids[i].paymentDeposit ?? bids[i].price * bids[i].quantity;
+      const startBalance = bids[i].startPaymentBalance ?? 0n;
+      expect(b + d).to.equal(startBalance);
+    }
+  }
+
+  async expectWonQuantities(bids: FHEBids) {
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auctionTokenBalanceOf(bids[i].bidder)).to.equal(
+        bids[i].wonQuantity!
+      );
+    }
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -434,8 +487,14 @@ export class FHEAuctionERC20MockTestCtx extends FHEAuctionMockTestCtx {
     this.paymentTokenOwner = params.paymentTokenOwner;
   }
 
-  async depositSingle(bidder: HardhatEthersSigner, amount: bigint) {
-    await this.approvePaymentDeposit(bidder, amount);
+  async depositSingle(
+    bidder: HardhatEthersSigner,
+    amount: bigint,
+    approve: boolean
+  ) {
+    if (approve) {
+      await this.approvePaymentDeposit(bidder, amount);
+    }
     await this.auctionERC20.connect(bidder).deposit(amount);
   }
 
@@ -471,9 +530,12 @@ export class FHEAuctionERC20MockTestCtx extends FHEAuctionMockTestCtx {
     if (deposit) {
       const minimumDeposit = await this.auction.minimumDeposit();
       for (let i = 0; i < bids.length; ++i) {
-        let deposit = bids[i].price * bids[i].quantity;
-        if (deposit < minimumDeposit) {
-          deposit = minimumDeposit;
+        let deposit = bids[i].paymentDeposit;
+        if (deposit == undefined) {
+          deposit = bids[i].price * bids[i].quantity;
+          if (deposit < minimumDeposit) {
+            deposit = minimumDeposit;
+          }
         }
         await this.approvePaymentDeposit(bids[i].bidder, deposit);
         await this.auctionERC20.connect(bids[i].bidder).deposit(deposit);
@@ -504,10 +566,9 @@ export class FHEAuctionERC20MockTestCtx extends FHEAuctionMockTestCtx {
 
   async minePaymentToken(bids: FHEBids) {
     for (let i = 0; i < bids.length; ++i) {
-      await this.minePaymentTokenSingle(
-        bids[i].bidder,
-        bids[i].price * bids[i].quantity
-      );
+      const amount =
+        bids[i].startPaymentBalance ?? bids[i].price * bids[i].quantity;
+      await this.minePaymentTokenSingle(bids[i].bidder, amount);
     }
   }
 

@@ -66,6 +66,10 @@ describe("deploy.native", () => {
   it("auction should have own the right amount of auction token", async () => {
     const erc20Addr = await ctx.auction.auctionToken();
     const erc20: ERC20 = await hre.ethers.getContractAt("ERC20", erc20Addr);
+    // before start, no transfer from beneficiary to contract
+    expect(await erc20.balanceOf(ctx.auctionAddr)).to.equal(0);
+    await ctx.auction.connect(ctx.owner).start(10000n, true);
+    // after start, transfer from beneficiary to contract should have been executed
     expect(await erc20.balanceOf(ctx.auctionAddr)).to.equal(
       ctx.params.quantity
     );
@@ -208,7 +212,7 @@ describe("deploy.native", () => {
 
   it("a started auction with at least one non-claimed bid cannot be terminated", async () => {
     await ctx.auction.connect(ctx.owner).start(10000n, true);
-    await ctx.depositSingleMinimum(alice);
+    await ctx.depositSingleMinimum(alice, true);
     await ctx.bid(alice, 100n, 12n);
     expect(await ctx.auction.bidCount()).to.equal(1n);
     expect(await ctx.auction.canTerminate()).to.be.false;
@@ -219,7 +223,7 @@ describe("deploy.native", () => {
 
   it("a started auction with zero non-claimed bid can be terminated", async () => {
     await ctx.auction.connect(ctx.owner).start(10000n, true);
-    await ctx.depositSingleMinimum(alice);
+    await ctx.depositSingleMinimum(alice, true);
     await ctx.bid(alice, 100n, 12n);
     await ctx.cancelBid(alice);
     expect(await ctx.auction.bidCount()).to.equal(0n);

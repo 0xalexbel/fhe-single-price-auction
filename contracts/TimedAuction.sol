@@ -94,14 +94,23 @@ abstract contract TimedAuction is ITimedAuction {
         }
     }
 
+    /**
+     * @notice Returns `true` if the auction is ready to start, `false` otherwise.
+     */
     function canStart() public view returns (bool) {
         return _flags == INITIALIZED;
     }
 
+    /**
+     * @notice Returns `true` if the auction can be stopped by calling the {stop} function, `false` otherwise.
+     */
     function canStop() public view returns (bool) {
         return (_flags == INITIALIZED_STARTED) && _stoppable;
     }
 
+    /**
+     * @notice Returns `true` if the auction can be terminated by calling the {terminate} function, `false` otherwise.
+     */
     function canTerminate() public view returns (bool) {
         uint256 f = _flags;
         if (f == UNINITIALIZED || f == INITIALIZED_TERMINATED || f == INITIALIZED_STARTED_ENDED_TERMINATED) {
@@ -123,14 +132,24 @@ abstract contract TimedAuction is ITimedAuction {
         return true;
     }
 
+    /**
+     * @notice Returns `true` if the auction has been initialized, `false` otherwise.
+     */
     function initialized() public view returns (bool) {
         return _flags != UNINITIALIZED;
     }
 
+    /**
+     * @notice Returns `true` if the auction is initialized and ready to accept bids, `false` otherwise.
+     */
     function isOpen() public view returns (bool) {
         return _state() == INITIALIZED_STARTED;
     }
 
+    /**
+     * @notice Returns `true` if the auction is ready to compute the auction prizes, `false` otherwise.
+     * When the auction is closed, it can no more accept bids.
+     */
     function closed() public view returns (bool) {
         return _state() == INITIALIZED_STARTED_ENDED;
     }
@@ -139,6 +158,9 @@ abstract contract TimedAuction is ITimedAuction {
         return _flags & FLAGS_TERMINATED != 0;
     }
 
+    /**
+     * @dev Throws if the auction cannot be initialized.
+     */
     modifier whenInitializable() {
         if (_flags != UNINITIALIZED) {
             revert NotInitializable();
@@ -146,6 +168,9 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction is not initialized.
+     */
     modifier whenInitialized() {
         if (!initialized()) {
             revert NotInitialized();
@@ -153,6 +178,9 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction cannot be started.
+     */
     modifier whenStartable() {
         if (!canStart()) {
             revert NotStartable();
@@ -160,6 +188,9 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction cannot be stopped.
+     */
     modifier whenStoppable() {
         if (!canStop()) {
             revert NotStoppable();
@@ -167,6 +198,9 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction cannot be terminated.
+     */
     modifier whenTerminable() {
         if (!canTerminate()) {
             revert NotTerminable();
@@ -174,6 +208,9 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction is not started.
+     */
     modifier whenStarted() {
         if ((_state() & FLAGS_STARTED) != 0) {
             revert NotStarted();
@@ -181,11 +218,17 @@ abstract contract TimedAuction is ITimedAuction {
         _;
     }
 
+    /**
+     * @dev Throws if the auction is not open and accepting new bids.
+     */
     modifier whenIsOpen() {
         _requireIsOpen();
         _;
     }
 
+    /**
+     * @dev Throws if the auction is not closed (in prize computing state).
+     */
     modifier whenClosed() {
         if (!closed()) {
             revert NotClosed();
@@ -194,7 +237,7 @@ abstract contract TimedAuction is ITimedAuction {
     }
 
     /**
-     * @dev Throws if the auction is not open.
+     * @dev Throws if the auction is not open and accepting new bids.
      */
     function _requireIsOpen() internal view virtual {
         if (_state() != INITIALIZED_STARTED) {

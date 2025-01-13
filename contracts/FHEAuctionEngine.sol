@@ -56,10 +56,15 @@ import {console} from "hardhat/console.sol";
  *
  * - The computational complexity O(N), linear in the number of bids.
  *
- * ### Step 4: Inverting ranking to index vector. O(N)
+ * ### Step 4 (Optional): Inverting ranking to index vector. O(N^2)
  *
- * - In this final step, we invert the ranking of the bids to produce an index vector, where the position in the vector
- * corresponds to the original index of the bid in the ranked list.
+ * - This step generates an index vector that maps the ranking of bids back to their original positions in the
+ * ranked list. Each position in the index vector corresponds to the original index of a bid in the ranked list.
+ *
+ * - The purpose of this step is to facilitate lookup or processing based on the original bid order.
+ *
+ * - This step is optional and can be skipped to minimize computation cost and if auction prizes can delivered directly
+ * based on ranking positions rather than requiring bidder addresses.
  */
 contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine {
     uint256 public constant MAX_UINT256 = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
@@ -142,6 +147,7 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
     uint16 private _rankedBidCount;
 
     ///@dev Array of bids sorted by rank order, where entry k contains the bid placed by bidder ranked at position k.
+    ///@dev 0 <= rank < _rankedBidCount
     ABid[] private _rankedBids;
 
     // Step 3: Ranked bid won quantity and uniform price calculation. O(N)
@@ -297,7 +303,7 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
     /**
      * @notice Retrieves the bid associated with the specified bidder address.
      * @param bidder The address of the bidder whose bid is being retrieved.
-     * @return id The encrypted ID of the bid.
+     * @return id The clear ID of the bid.
      * @return price The encrypted price of the bid.
      * @return quantity The encrypted quantity of the bid.
      */
@@ -310,7 +316,7 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
     /**
      * @notice Returns the bid ranked at the specified position `rank`.
      * The bid at rank `0` is the highest-ranked (winning) bid. Reverts if `rank` is out of bounds.
-     * @param rank The rank position of the bid to retrieve.
+     * @param rank The zero-based rank position of the bid to retrieve.
      * @return id The encrypted ID of the bid.
      * @return price The encrypted price of the bid.
      * @return quantity The encrypted quantity of the bid.
@@ -323,6 +329,32 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
         id = _rankedBids[rank].id;
         price = _rankedBids[rank].price;
         quantity = _rankedBids[rank].quantity;
+    }
+
+    /**
+     * @notice Retrieves the bid ranked at the specified position `rank`.
+     * The bid at rank `0` represents the highest-ranked (winning) bid.
+     * The function reverts if:
+     * - The ranked won quantities computation is not complete.
+     * - The provided `rank` is out of bounds.
+     *
+     * @param rank The zero-based rank position of the bid to retrieve.
+     * @return id The encrypted ID of the bid at the specified rank.
+     * @return price The encrypted price of the bid at the specified rank.
+     * @return quantity The encrypted quantity won by the bid at the specified rank.
+     */
+    function getWonBidByRank(uint16 rank) public view returns (euint16 id, euint256 price, euint256 quantity) {
+        if (!isRankedWonQuantitiesComplete()) {
+            revert Step3RankedWonQuantitiesNotCompleted();
+        }
+
+        if (rank >= _rankedBidCount) {
+            revert IndexOutOfBounds(rank, _rankedBidCount);
+        }
+
+        id = _rankedBids[rank].id;
+        price = _rankedBids[rank].price;
+        quantity = _rankedWonQuantities[rank];
     }
 
     /**
@@ -350,6 +382,13 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
      */
     function canClaim() external view returns (bool) {
         return isWonQuantitiesComplete();
+    }
+
+    /**
+     * @notice Returns `true` if all ranked won quantities have been computed (step 3),
+     */
+    function canClaimByRank() external view returns (bool) {
+        return isRankedWonQuantitiesComplete();
     }
 
     /**
@@ -398,6 +437,13 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
     }
 
     /**
+     * @notice Returns the bidder address associated with the specified `id`.
+     */
+    function getBidderById(uint16 id) external view returns (address) {
+        return _idToBidder[id];
+    }
+
+    /**
      * @notice Removes a bidder's bid from the list of bids
      *
      * @notice Requirements:
@@ -438,6 +484,10 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
         _idToIndexPlusOne[id] = 0;
         _idToBid[id] =
             ABid({price: euint256.wrap(0), quantity: euint256.wrap(0), id: euint16.wrap(0), rand: euint256.wrap(0)});
+
+        // AAA
+        _idToResumeQuantity[id] = euint256.wrap(0);
+        // AAA
 
         _bidCount--;
     }
@@ -514,6 +564,12 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
         _rankedBids.push(_emptySortedBid);
         _rankedWonQuantities.push(DUMMY_EUINT256_MEMORY);
         _wonQuantities.push(DUMMY_EUINT256_MEMORY);
+
+        // AAA
+        euint256 zeroWQ = TFHE.asEuint256(0);
+        TFHE.allowThis(zeroWQ);
+        _idToResumeQuantity[nextId] = zeroWQ;
+        // AAA
     }
 
     // ====================================================================== //
@@ -691,7 +747,7 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
      * - Returns `E_NOT_ENOUGH_GAS` if the `chunckSize` iterations could not be completed due to insufficient gas.
      * - Returns `S_NOT_FINISHED` if the iterations were completed but the computation step is not yet finished.
      * - Returns `S_FINISHED` if the iterations were completed (or fewer iterations were needed) and the bid ranking step has been completed.
-     *
+     * @dev gas formula = chunckSize * 300_000 + C
      * @param chunckSize The number of iterations to compute in a single call.
      * @return One of the following status code `S_FINISHED` or `S_NOT_FINISHED` or `E_NOT_ENOUGH_GAS`
      */
@@ -700,7 +756,6 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
             revert Step1BidsValidationNotCompleted();
         }
 
-        //uint256 startGas = gasleft();
         uint16 bidCount = _bidCount;
 
         require(chunckSize > 0, "Invalid chunck size");
@@ -874,8 +929,6 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
             require(_progressRB < _rankedBidsProgressMax(bidCount), "Internal error: wrong sort progress 5");
         }
 
-        //console.log("TOTAL GAS=%s", startGas - gasleft());
-
         return S_NOT_FINISHED;
     }
 
@@ -910,6 +963,9 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
     /**
      * @notice Computes a set of `chunckSize` iteration cycles for the step #3 (Ranked Won Quantities).
      * see function {xref-iterRankedBids}
+     * @dev After first iteration:
+     * gas = 13_331 (begin) + 56_550 (end) + 32_507 (loop init) + chunckSize * 152_680
+     *     = 102_388 + chunckSize * 152_680
      */
     function iterRankedWonQuantities(uint16 chunckSize) external returns (uint8) {
         // Average gas cost:
@@ -1163,6 +1219,58 @@ contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFHEAuctionEngine 
         _quantityWQ = quantity;
         // Allow gas cost ~= 26_000 gas
         TFHE.allowThis(quantity);
+
+        return S_NOT_FINISHED;
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////
+
+    mapping(uint16 id => uint16 resumeIdx) private _idToResumeIdx;
+    mapping(uint16 id => euint256 resumeQuantity) private _idToResumeQuantity;
+
+    function iterWonQuantitiesAtId(uint16 id, uint16 iterCount) external returns (uint8) {
+        uint16 fromIdx = _idToResumeIdx[id];
+        uint16 bidCount = _bidCount;
+
+        if (fromIdx == bidCount) {
+            return S_FINISHED;
+        }
+
+        if (iterCount > bidCount) {
+            iterCount = bidCount;
+        }
+
+        uint16 toIdx = (fromIdx > bidCount - iterCount) ? bidCount : fromIdx + iterCount;
+
+        euint256 quantity = _idToResumeQuantity[id];
+
+        // Gas cost from start to this point ~= 7000 gas (6797)
+        // Gas cost for loop init ~= 30_000 gas (27757, TFHE initialization)
+        // Gas cost for 1xloop ~= 35_000 gas (31889)
+        for (uint16 cursorIdx = fromIdx; cursorIdx < toIdx; ++cursorIdx) {
+            ebool eq_id = TFHE.eq(_rankedBids[cursorIdx].id, id);
+            quantity = TFHE.select(eq_id, _rankedWonQuantities[cursorIdx], quantity);
+        }
+
+        // Gas cost from this point to the end:
+        // - general case ~= 50_000 gas (48976)
+        // - worst case ~= 80_000 gas (74860)
+
+        _idToResumeIdx[id] = toIdx;
+        _idToResumeQuantity[id] = quantity;
+
+        TFHE.allowThis(quantity);
+
+        if (toIdx == bidCount) {
+            // store won quantity
+            TFHE.allow(quantity, owner());
+            return S_FINISHED;
+        }
 
         return S_NOT_FINISHED;
     }

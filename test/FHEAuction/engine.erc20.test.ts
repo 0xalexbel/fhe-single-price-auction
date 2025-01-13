@@ -58,7 +58,7 @@ describe("engine.erc20", () => {
     const bidPrice = 1337n;
     const bidQuantity = ctx.params.quantity - 1n;
 
-    await ctx.depositSingle(alice, bidPrice * bidQuantity);
+    await ctx.depositSingle(alice, bidPrice * bidQuantity, true);
 
     const input = ctx.fhevm.createEncryptedInput(
       ctx.auctionAddr,
@@ -551,8 +551,8 @@ describe("engine.erc20", () => {
     const aliceDeposit = bids[0].price * bids[0].quantity;
     const bobDeposit = (bids[1].price * bids[1].quantity) / 2n;
 
-    await ctx.depositSingle(bids[0].bidder, aliceDeposit);
-    await ctx.depositSingle(bids[1].bidder, bobDeposit);
+    await ctx.depositSingle(bids[0].bidder, aliceDeposit, true);
+    await ctx.depositSingle(bids[1].bidder, bobDeposit, true);
 
     await ctx.placeBidsWithoutDeposit(bids, true);
     await ctx.iterBidsValidation();
@@ -599,7 +599,7 @@ describe("engine.erc20", () => {
     await ctx.approvePaymentDeposit(bob, DEFAULT_PAYMENT_TOKEN_BALANCE);
     await ctx.paymentToken.connect(bob).transfer(alice, 100n);
     await expect(
-      ctx.depositSingle(bob, DEFAULT_PAYMENT_TOKEN_BALANCE)
+      ctx.depositSingle(bob, DEFAULT_PAYMENT_TOKEN_BALANCE, true)
     ).to.be.revertedWithCustomError(
       ctx.paymentToken,
       "ERC20InsufficientBalance"

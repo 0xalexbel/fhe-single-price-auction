@@ -45,20 +45,23 @@ abstract contract FHEAuctionBase is
         euint256 quantity;
     }
 
+    uint256 private immutable _paymentPenalty;
+    uint256 private immutable _minimumPaymentDeposit;
+
     address private _engine;
     address private _beneficiary;
     IERC20 private _auctionToken;
-    uint256 private _paymentPenalty;
-    uint256 private _minimumPaymentDeposit;
     uint256 private _clearUniformPrice;
 
     uint256 private _claimCount;
+    uint256 private _blindClaimCount;
 
-    mapping(address bidder => uint8) private _claimed;
+    mapping(address bidder => uint8) private _claimCompleted;
+    mapping(uint16 rank => uint8) private _blindClaimCompleted;
     mapping(address bidder => Bid) private _bidderToBid;
 
     error BidderNotRegistered(address bidder);
-    error DepositFailed();
+    error DepositFailed(address token, address from, uint256 amount);
     error WithdrawFailed();
     error InvalidEngine(address engine);
     error InvalidBeneficiary(address beneficiary);
@@ -67,6 +70,8 @@ abstract contract FHEAuctionBase is
     error InvalidTieBreakingRule(uint8 tieBreakingRule);
     error AlreadyClaimed(address bidder);
     error NotReadyToClaim(address bidder);
+    error RankAlreadyClaimed(uint16 rank);
+    error NotReadyToClaimRank(uint16 rank);
     error UniformPriceNotReadyToDecrypt();
 
     /**
@@ -101,37 +106,7 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Modifier to make a function callable only when the caller is a registered bidder.
-     *
-     * @notice Requirements:
-     * - The auction must have started.
-     * - Must be used as a final modifier as it is not checking if the auction is initialized
-     */
-    modifier onlyBidder() {
-        _checkBidder();
-        _;
-    }
-
-    /**
-     * @notice Reverts if the caller is not a registered bidder
-     */
-    function _checkBidder() internal view virtual {
-        if (!_registered(msg.sender)) {
-            revert BidderNotRegistered(msg.sender);
-        }
-    }
-
-    /**
-     * @notice Returns true if `bidder` is a registered bidder
-     */
-    function _registered(address bidder) internal view returns (bool) {
-        return IFHEAuctionEngine(_engine).bidderId(bidder) != 0;
-    }
-
-    /**
      * @notice Initializes the auction with a specified auction engine and parameters.
-     * During initialization, `auctionQuantity_` tokens will be transferred to the current auction contract as
-     * a deposit. If the contract is unable to transfer the required amount, the function will revert.
      *
      * @notice Requirements:
      * - The auction must not already be initialized (see `_initialize`).
@@ -140,8 +115,6 @@ abstract contract FHEAuctionBase is
      * - The `auctionToken_` must not be the zero address.
      * - The `auctionQuantity_` must be strictly positive.
      * - The `beneficiary_` must not be the zero address.
-     * - The `beneficiary_` must have approved the transfer of at least `auctionQuantity_` tokens to
-     * the current auction contract.
      * - The `tieBreakingRule_` must be a valid value.
      *
      * @param engine_ Address of the auction engine used to compute auction prizes.
@@ -180,30 +153,55 @@ abstract contract FHEAuctionBase is
         _beneficiary = beneficiary_;
         _auctionToken = auctionToken_;
 
-        uint256 balanceBefore = auctionToken_.balanceOf(address(this));
-        auctionToken_.transferFrom(beneficiary_, address(this), auctionQuantity_);
-        uint256 balanceAfter = auctionToken_.balanceOf(address(this));
-
-        if (balanceAfter - balanceBefore != auctionQuantity_) {
-            revert DepositFailed();
-        }
-
         IFHEAuctionEngine(engine_).initialize(auctionQuantity_, tieBreakingRule_);
     }
 
     /**
+     * @notice Modifier to make a function callable only when the caller is a registered bidder.
+     *
+     * @notice Requirements:
+     * - The auction must have started.
+     * - Must be used as a final modifier as it is not checking if the auction is initialized
+     */
+    modifier onlyBidder() {
+        _checkBidder();
+        _;
+    }
+
+    /**
+     * @notice Reverts if the caller is not a registered bidder
+     */
+    function _checkBidder() internal view virtual {
+        if (!_registered(msg.sender)) {
+            revert BidderNotRegistered(msg.sender);
+        }
+    }
+
+    /**
+     * @notice Returns true if `bidder` is a registered bidder
+     */
+    function _registered(address bidder) internal view returns (bool) {
+        return IFHEAuctionEngine(_engine).bidderId(bidder) != 0;
+    }
+
+    /**
      * @notice Starts the auction. (see `TimedAuction._start`).
+     * At start, {auctionQuantity} tokens will be transferred from the {beneficiary} to the current auction contract as
+     * a deposit. If the auction contract is unable to execute the transfer operation, the function will revert.
      *
      * @notice Requirements:
      * - The auction must be initialized.
      * - The auction must not have already started.
      * - The caller must be the auction contract owner.
+     * - The {beneficiary} must have approved the transfer of at least {auctionQuantity} tokens to
+     * the current auction contract.
      *
      * @param durationInSeconds The duration of the auction in seconds.
      * @param stoppable Indicates whether the auction can be manually stopped.
      */
     function start(uint256 durationInSeconds, bool stoppable) external onlyOwner nonReentrant {
         _start(durationInSeconds, stoppable);
+        _transferAuctionTokenFrom(_beneficiary, auctionQuantity());
     }
 
     /**
@@ -251,17 +249,17 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Returns the total amount of `auctionToken` available for auction.
-     */
-    function auctionQuantity() public view returns (uint256) {
-        return IFHEAuctionEngine(_engine).totalQuantity();
-    }
-
-    /**
      * @notice Returns the address of the auction beneficiary, who will receive the proceeds of the auction.
      */
     function beneficiary() public view returns (address) {
         return _beneficiary;
+    }
+
+    /**
+     * @notice Returns the total amount of `auctionToken` available for auction.
+     */
+    function auctionQuantity() public view returns (uint256) {
+        return IFHEAuctionEngine(_engine).totalQuantity();
     }
 
     /**
@@ -286,6 +284,15 @@ abstract contract FHEAuctionBase is
     function getBid() public view returns (euint256 price, euint256 quantity) {
         price = _bidderToBid[msg.sender].price;
         quantity = _bidderToBid[msg.sender].quantity;
+    }
+
+    /**
+     * @notice Retrieves the bidder address associated with the specified bid ID.
+     * @param id The ID of the bid to retrieve.
+     * @return bidder The address of the bidder.
+     */
+    function _getBidderById(uint16 id) internal view returns (address) {
+        return IFHEAuctionEngine(_engine).getBidderById(id);
     }
 
     /**
@@ -337,6 +344,7 @@ abstract contract FHEAuctionBase is
      * @notice Requirements:
      * - The auction must be closed (ie. the auction is not accepting any additional bid).
      * - The caller must be a registered bidder.
+     * - see {_canClaim} for additional requirements.
      */
     function canClaim() public view whenClosed onlyBidder returns (bool) {
         return _canClaim(msg.sender);
@@ -398,20 +406,19 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Abstract internal function that must be implemented by derived contracts.
-     * This function is intended to handle the claim process for a given bidder.
-     * The implementation should define the logic for processing the claim based on
-     * the provided bidder, auction ID, validated price, and won quantity.
+     * @dev Abstract internal function to process a claim for the bid placed by bidder `bidder`.
+     * Must be implemented by derived contracts to handle claims based on the bidder address, clear ID,
+     * encrypted validated price, and encrypted won quantity.
      */
     function _claim(address bidder, uint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
 
     /**
      * @notice Returns `true` if the `bidder` has successfully claimed their auction prize, `false` otherwise.
      * @param bidder The address of the bidder whose claim status is being checked.
-     * @return completed A boolean indicating whether the bidder's auction prize has been claimed.
+     * @return completed A boolean indicating whether the bidder's auction prize has been successfully claimed.
      */
     function claimCompleted(address bidder) public view returns (bool) {
-        return _claimed[bidder] == CLAIMED;
+        return _claimCompleted[bidder] == CLAIMED;
     }
 
     /**
@@ -429,15 +436,103 @@ abstract contract FHEAuctionBase is
         if (claimCompleted(bidder)) {
             revert AlreadyClaimed(bidder);
         }
-        _claimed[bidder] = CLAIMED;
+        _claimCompleted[bidder] = CLAIMED;
         _claimCount++;
+    }
+
+    /**
+     * @notice Returns `true` if the auction prize ranked at position `rank` is ready to be claimed, `false` otherwise.
+     *
+     * @notice Requirements:
+     * - The auction must be closed (ie. the auction is not accepting any additional bid).
+     * - see {_canBlindClaim} for additional requirements.
+     *
+     * @param rank The zero-based rank of the unidentified bidder for whom the prize is being claimed.
+     */
+    function canBlindClaim(uint16 rank) public view whenClosed returns (bool) {
+        return _canBlindClaim(rank);
+    }
+
+    /**
+     * @notice Returns `true` the auction prize ranked at position `rank` is ready to be claimed, `false` otherwise.
+     * Internal function without access restriction.
+     * This function is meant to be overriden to add extra conditions for a successfull claim.
+     *
+     * @notice Conditions for a successful claim:
+     * - All ranked won quantities have been computed by the auction `_engine`.
+     * - The prize at rank position `rank` has not yet been claimed.
+     *
+     * @param rank The zero-based rank of the unidentified bidder for whom the prize is being claimed.
+     */
+    function _canBlindClaim(uint16 rank) internal view virtual returns (bool) {
+        if (blindClaimCompleted(rank)) {
+            // Cannot claim rank twice
+            return false;
+        }
+
+        if (!IFHEAuctionEngine(_engine).isRankedWonQuantitiesComplete()) {
+            // Computation is not complete
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * @notice Blindly claims the auction prize on behalf of the unidentified bidder ranked at position `rank`.
+     * The prize is awarded to the bidder at the final uniform price determined by the auction.
+     * The caller acts as an intermediary and does not directly receive the prize.
+     *
+     * @dev Requirements:
+     * - The auction must be closed.
+     * - The auction engine must have computed the final won quantities for all bidders.
+     * - The specified rank must not have already been claimed.
+     *
+     * @param rank The zero-based rank of the bidder for whom the prize is being claimed.
+     */
+    function blindClaim(uint16 rank) external nonReentrant whenClosed {
+        if (blindClaimCompleted(rank)) {
+            revert RankAlreadyClaimed(rank);
+        }
+
+        (euint16 id, euint256 validatedPrice, euint256 wonQuantity) = IFHEAuctionEngine(_engine).getWonBidByRank(rank);
+        if (euint256.unwrap(wonQuantity) == 0) {
+            revert NotReadyToClaimRank(rank);
+        }
+
+        _blindClaim(rank, id, validatedPrice, wonQuantity);
+    }
+
+    /**
+     * @dev Abstract internal function to process a claim for the bid ranked at `rank`.
+     * Must be implemented by derived contracts to handle claims based on the clear rank, encrypted ID,
+     * encrypted validated price, and encrypted won quantity.
+     */
+    function _blindClaim(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
+
+    /**
+     * @notice Returns `true` if the prize for the unidentified bidder at the specified `rank` has been successfully
+     * claimed via {blindClaimByRank}, `false` otherwise.
+     * @param rank The zero-based rank of the unidentified bidder.
+     * @return completed `true` if the prize has been successfully claimed, `false` otherwise.
+     */
+    function blindClaimCompleted(uint16 rank) public view returns (bool) {
+        return _blindClaimCompleted[rank] == CLAIMED;
+    }
+
+    function _markBlindClaimCompleted(uint16 rank) internal {
+        if (blindClaimCompleted(rank)) {
+            revert RankAlreadyClaimed(rank);
+        }
+        _blindClaimCompleted[rank] = CLAIMED;
+        _blindClaimCount++;
     }
 
     /**
      * @dev See {TimedAuction-_canTerminateAfterStart}.
      */
     function _canTerminateAfterStart() internal view override returns (bool) {
-        return _claimCount == bidCount();
+        return _claimCount == bidCount() || _blindClaimCount == bidCount();
     }
 
     /**
@@ -462,12 +557,45 @@ abstract contract FHEAuctionBase is
      * @param amount The amount of auctioned tokens to transfer to the `to` address.
      */
     function _transferAuctionTokenTo(address to, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+
         uint256 balanceBefore = _auctionToken.balanceOf(to);
         _auctionToken.transfer(to, amount);
         uint256 balanceAfter = _auctionToken.balanceOf(to);
 
         // Debug
         require((balanceAfter - balanceBefore) == amount, "Panic:(balanceAfter - balanceBefore) != amount");
+    }
+
+    /**
+     * @dev Internal function with no access restrictions. Handles the transfer of `amount` ERC20 auction tokens
+     * from the `from`'s account into the auction contract.
+     *
+     * This function utilizes the ERC20 allowance mechanism and calls {IERC20-transferFrom} to transfer tokens
+     * from the source address to the auction contract. It assumes that the source address has approved the auction
+     * contract to spend the specified `amount` of tokens in advance.
+     *
+     * @param from The address of the source account.
+     * @param amount The amount of ERC20 tokens to be transferred.
+     */
+    function _transferAuctionTokenFrom(address from, uint256 amount) internal {
+        if (amount == 0) {
+            return;
+        }
+
+        IERC20 aToken = _auctionToken;
+        uint256 balanceBefore = aToken.balanceOf(address(this));
+        bool succeeded = aToken.transferFrom(from, address(this), amount);
+        if (!succeeded) {
+            revert DepositFailed(address(aToken), from, amount);
+        }
+        uint256 balanceAfter = aToken.balanceOf(address(this));
+
+        if (balanceAfter - balanceBefore != amount) {
+            revert DepositFailed(address(aToken), from, amount);
+        }
     }
 
     /**
