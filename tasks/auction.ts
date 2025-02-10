@@ -25,7 +25,7 @@ import {
   SCOPE_AUCTION_TASK_BID,
   SCOPE_AUCTION_TASK_BLINDCLAIM,
   SCOPE_AUCTION_TASK_CANBID,
-  SCOPE_AUCTION_TASK_CLAIM_INFOS,
+  SCOPE_AUCTION_TASK_CLAIM_INFO,
   SCOPE_AUCTION_TASK_COMPUTE,
   SCOPE_AUCTION_TASK_INFO,
 } from "./task-names";
@@ -101,48 +101,54 @@ declareAuctionTask(
     taskArguments: TaskArguments,
     hre: HardhatRuntimeEnvironment
   ) {
-    console.info(`Auction address                 : ${auction.address}`);
+    console.info(`Address                 : ${auction.address}`);
     console.info(
-      `Auction beneficiary             : ${await auction.base.beneficiary()}`
+      `Beneficiary             : ${await auction.base.beneficiary()}`
     );
     console.info(
-      `Auction quantity                : ${await auction.base.auctionQuantity()}`
+      `Quantity                : ${await auction.base.auctionQuantity()}`
     );
     console.info(
-      `Auction token                   : ${await auction.base.auctionToken()}`
+      `Auction token           : ${await auction.base.auctionToken()}`
     );
 
     if (!auction.isNative) {
       console.info(
-        `Auction payment token           : ${await auction.erc20!.paymentToken()}`
+        `Payment token           : ${await auction.erc20!.paymentToken()}`
       );
     }
 
     console.info(
-      `Auction payment penalty         : ${await auction.base.paymentPenalty()}`
+      `Payment penalty         : ${await auction.base.paymentPenalty()}`
     );
 
     const open = await auction.base.isOpen();
     if (open) {
       console.info(
-        `Auction is stoppable            : ${await auction.base.stoppable()}`
+        `Stoppable               : ${await auction.base.stoppable()}`
       );
     }
     console.info(
-      `Auction bid count               : ${await auction.base.bidCount()}`
+      `Bid count                      : ${await auction.base.bidCount()}`
     );
     console.info(
-      `Auction maximum bid count       : ${await auction.base.maximumBidCount()}`
+      `Maximum bid count              : ${await auction.base.maximumBidCount()}`
     );
     console.info(
-      `Auction initialized             : ${await auction.base.initialized()}`
-    );
-    console.info(`Auction open                    : ${open}`);
-    console.info(
-      `Auction closed                  : ${await auction.base.closed()}`
+      `Min iterations for blind claim : ${await auction.base.minIterationsForBlindClaim()}`
     );
     console.info(
-      `Auction terminated              : ${await auction.base.terminated()}`
+      `Computed iterations            : ${await auction.base.computedIterations()}`
+    );
+    console.info(
+      `Initialized                    : ${await auction.base.initialized()}`
+    );
+    console.info(`Open                           : ${open}`);
+    console.info(
+      `Closed                         : ${await auction.base.closed()}`
+    );
+    console.info(
+      `Terminated                     : ${await auction.base.terminated()}`
     );
   }
 );
@@ -393,10 +399,8 @@ declareAuctionTask(
   auctionScope
     .task(SCOPE_AUCTION_TASK_COMPUTE, "Compute auction")
     .addParam("worker", "Worker address")
-    .addFlag(
-      "onlyBlindClaim",
-      "Stops when the auction is ready for blind claim"
-    )
+    .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint)
+    .addFlag("blindClaim", "Stops when the auction is ready for blind claim")
     .addOptionalParam(
       "count",
       "Number of working cycles",
@@ -420,12 +424,12 @@ declareAuctionTask(
     const minIterForClaim = await auction.base.minIterationsForClaim();
     const computedIter = await auction.base.computedIterations();
 
-    const maxIter = taskArguments.onlyBlindClaim
+    const maxIter = taskArguments.blindClaim
       ? minIterForBlindClaim
       : minIterForClaim;
 
     if (computedIter >= maxIter) {
-      if (taskArguments.onlyBlindClaim) {
+      if (taskArguments.blindClaim) {
         console.info(`✅ Auction ${auction.address} is ready for blind claim`);
       } else {
         console.info(`✅ Auction ${auction.address} is ready for claim`);
@@ -454,7 +458,9 @@ declareAuctionTask(
 
     const tx = await auction.base
       .connect(worker)
-      .computeAuction(taskArguments.count, taskArguments.onlyBlindClaim);
+      .computeAuction(taskArguments.count, taskArguments.blindClaim, {
+        gasLimit: taskArguments.gasLimit,
+      });
 
     const receipt = await tx.wait(1);
     const report = parseComputeEvents(receipt!, auction.base);
@@ -462,12 +468,22 @@ declareAuctionTask(
     logGas(hre, receipt, `Compute`);
 
     console.info(`Compute : Num cycles : ${report.computedCycles}`);
-    console.info(
-      `Compute : Progress   : ${(report.endProgress * 100n) / maxIter}%`
-    );
+    if (taskArguments.blindClaim) {
+      console.info(
+        `Compute : Progress   : ${
+          (report.endProgress * 100n) / maxIter
+        }% (before ready for blind claim)`
+      );
+    } else {
+      console.info(
+        `Compute : Progress   : ${
+          (report.endProgress * 100n) / maxIter
+        }% (before ready for claim)`
+      );
+    }
 
     if (report.endProgress >= maxIter) {
-      if (taskArguments.onlyBlindClaim) {
+      if (taskArguments.blindClaim) {
         console.info(`✅ Auction ${auction.address} is ready for blind claim`);
       } else {
         console.info(`✅ Auction ${auction.address} is ready for claim`);
@@ -484,9 +500,10 @@ declareAuctionTask(
   auctionScope
     .task(
       SCOPE_AUCTION_TASK_BLINDCLAIM,
-      "Blind claim. Each registered bidder can/must perform a blind claim. (Beta version)"
+      "Blind claim. Each registered bidder can perform a blind claim. (Beta version)"
     )
     .addParam("bidder", "Bidder address")
+    .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint)
     .addFlag("forceClaimAgain", "Force re-execute a blind claim."),
   async function (
     auction: FHEAuctionResolution,
@@ -528,7 +545,9 @@ declareAuctionTask(
       return;
     }
 
-    const tx = await auction.base.connect(resolvedBidder.signer).blindClaim();
+    const tx = await auction.base
+      .connect(resolvedBidder.signer)
+      .blindClaim({ gasLimit: taskArguments.gasLimit });
     const receipt = await tx.wait(1);
 
     logGas(hre, receipt, `Blind claim`);
@@ -541,7 +560,7 @@ declareAuctionTask(
 
 declareAuctionTask(
   auctionScope.task(
-    SCOPE_AUCTION_TASK_CLAIM_INFOS,
+    SCOPE_AUCTION_TASK_CLAIM_INFO,
     "Prints auction claim infos."
   ),
   async function (

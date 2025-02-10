@@ -102,7 +102,7 @@ importers:
         specifier: ^0.6.1
         version: 0.6.1
       fhevmjs:
-        specifier: ^0.6.1
+        specifier: ^0.6.2
         version: 0.6.2
       fs-extra:
         specifier: ^10.1.0
