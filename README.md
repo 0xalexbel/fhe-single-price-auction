@@ -162,8 +162,11 @@ npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638b
 ### Step 10: Prizes verification
 
 ```bash
+# Bob's ERC20 Auction Token (AUC) balance
 npx hardhat --network sepolia erc20 balance --token auction --account 2
+# Carol's ERC20 Auction Token (AUC) balance
 npx hardhat --network sepolia erc20 balance --token auction --account 3
+# David's ERC20 Auction Token (AUC) balance
 npx hardhat --network sepolia erc20 balance --token auction --account 4
 ```
 
