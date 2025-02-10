@@ -5,15 +5,23 @@ import {
   time,
 } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { FHEBids, FHEAuctionERC20MockTestCtx } from "./utils";
-import { deployERC20AuctionFixture } from "./fixtures";
+import {
+  FHEBids,
+  FHEAuctionERC20MockTestCtx,
+  TieBreakingRulePriceId,
+} from "./utils";
+import {
+  deployERC20AuctionMockFixture,
+  deployERC20AuctionUsingFactoryFixture,
+} from "./fixtures";
 import { reencryptEuint256 } from "../reencrypt";
 import { awaitCoprocessor } from "../coprocessorUtils";
 import { awaitAllDecryptionResults } from "../asyncDecrypt";
 
+const DEFAULT_MAX_BID_COUNT = 10000n;
 const DEFAULT_QUANTITY = 12345n;
 const DEFAULT_DURATION = 86400n;
-const DEFAULT_TIE_BREAKING_RULE = 2n; //PriceId
+const DEFAULT_TIE_BREAKING_RULE = TieBreakingRulePriceId;
 const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
@@ -26,10 +34,26 @@ describe("engine.erc20", () => {
   let bob: HardhatEthersSigner;
   let charlie: HardhatEthersSigner;
 
-  async function fixture() {
-    return deployERC20AuctionFixture(
+  async function fixtureUsingFactory() {
+    return deployERC20AuctionUsingFactoryFixture(
       DEFAULT_QUANTITY,
       DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
+      DEFAULT_TIE_BREAKING_RULE,
+      DEFAULT_MIN_PAYMENT_DEPOSIT,
+      DEFAULT_PAYMENT_PENALTY,
+      DEFAULT_STOPPABLE,
+      true /* start */,
+      DEFAULT_PAYMENT_TOKEN_BALANCE,
+      DEFAULT_PAYMENT_TOKEN_TOTAL_SUPPLY
+    );
+  }
+
+  async function fixture() {
+    return deployERC20AuctionMockFixture(
+      DEFAULT_QUANTITY,
+      DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
       DEFAULT_TIE_BREAKING_RULE,
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
@@ -41,7 +65,7 @@ describe("engine.erc20", () => {
   }
 
   beforeEach(async function () {
-    const res = await loadFixture(fixture);
+    const res = await loadFixture(fixtureUsingFactory);
     ctx = res.ctx;
     alice = res.alice;
     bob = res.bob;
@@ -141,7 +165,7 @@ describe("engine.erc20", () => {
 
     await ctx.placeBidsWithDeposit(bids, false);
 
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.false;
+    expect(await ctx.engine.sortCompleted()).to.be.false;
   });
 
   it("three bids validation", async () => {
@@ -153,10 +177,13 @@ describe("engine.erc20", () => {
 
     await ctx.placeBidsWithDeposit(bids, false);
 
-    expect(await ctx.engine.bidsValidationProgressMax()).to.equal(3);
+    expect(await ctx.engine.validationProgressMax()).to.equal(0);
 
     await ctx.auction.connect(ctx.owner).stop();
-    await ctx.iterBidsValidation();
+
+    expect(await ctx.engine.validationProgressMax()).to.equal(3);
+
+    await ctx.computeValidation();
   });
 
   it("three bids validation with unsufficiant deposit, should be zero", async () => {
@@ -176,7 +203,7 @@ describe("engine.erc20", () => {
 
     await ctx.deposit(bids, minimumDeposit, true);
     await ctx.placeBidsWithoutDeposit(bids, true);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
     await ctx.expectBidsToEqual(validatedBids);
   });
 
@@ -188,7 +215,7 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.placeBidsWithDeposit(bids, true);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
     await ctx.expectBidsToEqual(bids);
   });
 
@@ -223,8 +250,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -238,14 +265,14 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
 
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.false;
-    await ctx.engine.iterRankedBids(100);
-    await ctx.engine.iterRankedBids(100);
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.true;
-    expect(await ctx.engine.rankedBidsProgress()).to.equal(1);
-    expect(await ctx.engine.rankedBidsProgressMax()).to.equal(1);
+    expect(await ctx.engine.sortCompleted()).to.be.false;
+    await ctx.engine.computeSort(100);
+    await ctx.engine.computeSort(100);
+    expect(await ctx.engine.sortCompleted()).to.be.true;
+    expect(await ctx.engine.sortProgress()).to.equal(1);
+    expect(await ctx.engine.sortProgressMax()).to.equal(1);
 
     await ctx.engine.connect(ctx.owner).allowRankedBids();
     await awaitCoprocessor();
@@ -265,8 +292,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -282,8 +309,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -299,8 +326,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -318,8 +345,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -337,8 +364,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -356,8 +383,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -375,8 +402,8 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -405,15 +432,15 @@ describe("engine.erc20", () => {
 
     await ctx.minePaymentToken(bids);
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("N bids: p(i) > p(i+1)", async () => {
@@ -440,15 +467,15 @@ describe("engine.erc20", () => {
 
     await ctx.minePaymentToken(bids);
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("N bids: p(i) = p(i+1)", async () => {
@@ -475,15 +502,15 @@ describe("engine.erc20", () => {
 
     await ctx.minePaymentToken(bids);
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("Uniform price, 2 bids: p(1) < p(2)", async () => {
@@ -498,12 +525,12 @@ describe("engine.erc20", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
     // cannot decrypt uniform price
     expect(await ctx.auction.canDecryptUniformPrice()).to.be.false;
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
     // can decrypt uniform price
     expect(await ctx.auction.canDecryptUniformPrice()).to.be.true;
 
@@ -514,7 +541,7 @@ describe("engine.erc20", () => {
     expect(await ctx.auction.connect(alice).canClaim()).to.be.false;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.false;
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
 
     expect(await ctx.auction.connect(alice).canClaim()).to.be.true;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.true;
@@ -555,17 +582,17 @@ describe("engine.erc20", () => {
     await ctx.depositSingle(bids[1].bidder, bobDeposit, true);
 
     await ctx.placeBidsWithoutDeposit(bids, true);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     await ctx.auction.connect(ctx.owner).decryptUniformPrice();
     await awaitAllDecryptionResults();
 
     expect(await ctx.auction.clearUniformPrice()).to.equal(bids[0].price);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
 
     expect(await ctx.auction.connect(alice).canClaim()).to.be.true;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.true;
@@ -614,9 +641,10 @@ describe("engine.erc20.max", () => {
   let charlie: HardhatEthersSigner;
 
   async function fixture() {
-    return deployERC20AuctionFixture(
+    return deployERC20AuctionMockFixture(
       DEFAULT_QUANTITY,
       DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
       DEFAULT_TIE_BREAKING_RULE,
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
@@ -652,7 +680,7 @@ describe("engine.erc20.max", () => {
     ];
 
     await ctx.placeBidsWithDeposit(bids, true);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
     await ctx.expectBidsToEqual(validatedBids);
   });
 });

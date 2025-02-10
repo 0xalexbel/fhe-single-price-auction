@@ -5,15 +5,23 @@ import {
   time,
 } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import { FHEBids, FHEAuctionNativeMockTestCtx } from "./utils";
-import { deployNativeAuctionFixture } from "./fixtures";
+import {
+  FHEBids,
+  FHEAuctionNativeMockTestCtx,
+  TieBreakingRulePriceId,
+} from "./utils";
+import {
+  deployNativeAuctionMockFixture,
+  deployNativeAuctionUsingFactoryFixture,
+} from "./fixtures";
 import { reencryptEuint256 } from "../reencrypt";
 import { awaitCoprocessor } from "../coprocessorUtils";
 import { awaitAllDecryptionResults } from "../asyncDecrypt";
 
+const DEFAULT_MAX_BID_COUNT = 10000n;
 const DEFAULT_QUANTITY = 12345n;
 const DEFAULT_DURATION = 86400n;
-const DEFAULT_TIE_BREAKING_RULE = 2n; //PriceId
+const DEFAULT_TIE_BREAKING_RULE = TieBreakingRulePriceId;
 const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
@@ -25,10 +33,24 @@ describe("engine.native", () => {
   let charlie: HardhatEthersSigner;
   let auctionQuantity: bigint;
 
-  async function fixture() {
-    return deployNativeAuctionFixture(
+  async function fixtureUsingFactory() {
+    return deployNativeAuctionUsingFactoryFixture(
       DEFAULT_QUANTITY,
       DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
+      DEFAULT_TIE_BREAKING_RULE,
+      DEFAULT_MIN_PAYMENT_DEPOSIT,
+      DEFAULT_PAYMENT_PENALTY,
+      DEFAULT_STOPPABLE,
+      true /* start */
+    );
+  }
+
+  async function fixture() {
+    return deployNativeAuctionMockFixture(
+      DEFAULT_QUANTITY,
+      DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
       DEFAULT_TIE_BREAKING_RULE,
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
@@ -38,7 +60,7 @@ describe("engine.native", () => {
   }
 
   beforeEach(async function () {
-    const res = await loadFixture(fixture);
+    const res = await loadFixture(fixtureUsingFactory);
     ctx = res.ctx;
     alice = res.alice;
     bob = res.bob;
@@ -139,7 +161,7 @@ describe("engine.native", () => {
 
     await ctx.placeBidsWithDeposit(bids, false);
 
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.false;
+    expect(await ctx.engine.sortCompleted()).to.be.false;
   });
 
   it("three bids validation", async () => {
@@ -151,10 +173,13 @@ describe("engine.native", () => {
 
     await ctx.placeBidsWithDeposit(bids, false);
 
-    expect(await ctx.engine.bidsValidationProgressMax()).to.equal(3);
+    expect(await ctx.engine.validationProgressMax()).to.equal(0);
 
     await ctx.auction.connect(ctx.owner).stop();
-    await ctx.iterBidsValidation();
+
+    expect(await ctx.engine.validationProgressMax()).to.equal(3);
+
+    await ctx.computeValidation();
   });
 
   it("three bids validation with unsufficiant deposit, should be zero", async () => {
@@ -174,7 +199,7 @@ describe("engine.native", () => {
 
     await ctx.deposit(bids, minimumDeposit);
     await ctx.placeBidsWithoutDeposit(bids, true);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
     await ctx.expectBidsToEqual(validatedBids);
   });
 
@@ -186,7 +211,7 @@ describe("engine.native", () => {
     ];
 
     await ctx.placeBidsWithDeposit(bids, true);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
     await ctx.expectBidsToEqual(bids);
   });
 
@@ -221,8 +246,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -236,14 +261,14 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
 
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.false;
-    await ctx.engine.iterRankedBids(100);
-    await ctx.engine.iterRankedBids(100);
-    expect(await ctx.engine.isRankedBidsComplete()).to.be.true;
-    expect(await ctx.engine.rankedBidsProgress()).to.equal(1);
-    expect(await ctx.engine.rankedBidsProgressMax()).to.equal(1);
+    expect(await ctx.engine.sortCompleted()).to.be.false;
+    await ctx.engine.computeSort(100);
+    await ctx.engine.computeSort(100);
+    expect(await ctx.engine.sortCompleted()).to.be.true;
+    expect(await ctx.engine.sortProgress()).to.equal(1);
+    expect(await ctx.engine.sortProgressMax()).to.equal(1);
 
     await ctx.engine.connect(ctx.owner).allowRankedBids();
     await awaitCoprocessor();
@@ -263,8 +288,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -280,8 +305,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -297,8 +322,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -316,8 +341,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -335,8 +360,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -354,8 +379,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -373,8 +398,8 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
 
@@ -402,15 +427,15 @@ describe("engine.native", () => {
     }
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("N bids: p(i) > p(i+1)", async () => {
@@ -436,15 +461,15 @@ describe("engine.native", () => {
     }
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("N bids: p(i) = p(i+1)", async () => {
@@ -470,15 +495,15 @@ describe("engine.native", () => {
     }
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     const uniformPrice = await ctx.getClearUniformPrice();
     expect(uniformPrice).to.equal(p0);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
   });
 
   it("Uniform price, 2 bids: p(1) < p(2)", async () => {
@@ -493,12 +518,12 @@ describe("engine.native", () => {
     ];
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
     // cannot decrypt uniform price
     expect(await ctx.auction.canDecryptUniformPrice()).to.be.false;
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
     // can decrypt uniform price
     expect(await ctx.auction.canDecryptUniformPrice()).to.be.true;
 
@@ -509,7 +534,7 @@ describe("engine.native", () => {
     expect(await ctx.auction.connect(alice).canClaim()).to.be.false;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.false;
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
 
     expect(await ctx.auction.connect(alice).canClaim()).to.be.true;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.true;
@@ -549,17 +574,17 @@ describe("engine.native", () => {
     await ctx.deposit([bids[1]], bobDeposit);
 
     await ctx.placeBids(bids, false, true);
-    await ctx.iterBidsValidation();
-    await ctx.iterRankedBids();
+    await ctx.computeValidation();
+    await ctx.computeSort();
     await ctx.expectRankedBidsToEqual(rankedBids);
-    await ctx.iterRankedWonQuantities();
+    await ctx.computeWonQuantitiesByRank();
 
     await ctx.auction.connect(ctx.owner).decryptUniformPrice();
     await awaitAllDecryptionResults();
 
     expect(await ctx.auction.clearUniformPrice()).to.equal(bids[0].price);
 
-    await ctx.iterWonQuantities();
+    await ctx.computeWonQuantitiesById();
 
     expect(await ctx.auction.connect(alice).canClaim()).to.be.true;
     expect(await ctx.auction.connect(bob).canClaim()).to.be.true;
@@ -594,7 +619,7 @@ describe("engine.native", () => {
     await expect(ctx.depositSingle(bob, bobBalance + 1n)).to.be.rejected;
   });
 
-  it("BBB Gas Cost", async () => {
+  it("Gas Cost", async () => {
     const signers = await hre.ethers.getSigners();
     const n: number = signers.length;
 
@@ -617,10 +642,10 @@ describe("engine.native", () => {
     }
 
     await ctx.bidDepositStop(bids);
-    await ctx.iterBidsValidation();
+    await ctx.computeValidation();
 
-    await ctx.engine.iterRankedBids(1n); //N(N-1)/2
-    await ctx.engine.iterRankedBids(9n); //N(N-1)/2
+    await ctx.engine.computeSort(1n); //N(N-1)/2
+    await ctx.engine.computeSort(9n); //N(N-1)/2
     // First = 436705
     // 1 = 365701
     // 2 = 629616
@@ -631,16 +656,16 @@ describe("engine.native", () => {
     // 7 = 1843409
     // 8 = 2048194
     // 9 = 2281755
-    // await ctx.iterRankedBids();
+    // await ctx.computeSort();
     // await ctx.expectRankedBidsToEqual(rankedBids);
-    //await ctx.iterRankedWonQuantities();
+    //await ctx.computeWonQuantitiesByRank();
 
     // 1: 112756
     // 2: 316184 (203 428)
     // 3: 468863 (152 679)
     // 4: 621543 (152 680)
     // 5: 774223 (152 680)
-    //await ctx.engine.iterRankedWonQuantities(1n);
+    //await ctx.engine.computeWonQuantitiesByRank(1n);
     // Cost
     // 255069 (1) (begin=13331)(end=56550)
     // 407748 (2) 407748-255069=152679 (begin=13331)(end=56550)
@@ -650,7 +675,7 @@ describe("engine.native", () => {
     // k > 1
     // gas = 13331 (begin) + 56550 (end) + 32507 (loop init) + k*152680
     // gas = 102388 + k*152680
-    //await ctx.engine.iterRankedWonQuantities(5n);
+    //await ctx.engine.computeWonQuantitiesByRank(5n);
     //awaitCoprocessor();
     //32507+13331+56550
 

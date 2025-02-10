@@ -9,7 +9,9 @@ coverage
 dist
 node_modules
 types
-deployments
+!deployments
+deployments/*
+!deployments/sepolia
 kms-fhe-keys/
 network-fhe-keys/
 fhevmTemp/

@@ -95,6 +95,13 @@ abstract contract TimedAuction is ITimedAuction {
     }
 
     /**
+     * @notice Returns `true` if the auction can be manually stopped.
+     */
+    function stoppable() public view returns (bool) {
+        return _stoppable;
+    }
+
+    /**
      * @notice Returns `true` if the auction is ready to start, `false` otherwise.
      */
     function canStart() public view returns (bool) {
@@ -144,6 +151,19 @@ abstract contract TimedAuction is ITimedAuction {
      */
     function isOpen() public view returns (bool) {
         return _state() == INITIALIZED_STARTED;
+    }
+
+    /**
+     * @notice Returns the auction status code. Can be one of the following values.
+     *      - UNINITIALIZED = uint256(0x0)
+     *      - INITIALIZED = uint256(0x1)
+     *      - INITIALIZED_TERMINATED = uint256(0x9)
+     *      - INITIALIZED_STARTED = uint256(0x3)
+     *      - INITIALIZED_STARTED_ENDED = uint256(0x7)
+     *      - INITIALIZED_STARTED_ENDED_TERMINATED = uint256(0xF)
+     */
+    function statusCode() public view returns (uint256) {
+        return _state();
     }
 
     /**

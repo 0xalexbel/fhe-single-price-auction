@@ -6,12 +6,16 @@ import { FhevmInstance } from "fhevmjs/node";
 import { awaitCoprocessor } from "../coprocessorUtils";
 import {
   AuctionERC20,
-  FHEAuctionEngineMock,
   PaymentERC20,
   FHEAuctionNativeMock,
   FHEAuction,
   FHEAuctionERC20Mock,
+  FHEAuctionEngineBaseMock,
+  FHEAuctionEngineIterator,
 } from "../../types";
+import { awaitAllDecryptionResults } from "../asyncDecrypt";
+import { bigint } from "hardhat/internal/core/params/argumentTypes";
+import { ContractTransactionResponse } from "ethers";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -26,7 +30,7 @@ export type FHEAuctionParams = {
 
 export type FHEAuctionMockTestBaseParams = {
   auctionAddr: string;
-  engine: FHEAuctionEngineMock;
+  engine: FHEAuctionEngineBaseMock;
   engineAddr: string;
   auctionToken: AuctionERC20;
   auctionTokenAddr: string;
@@ -54,7 +58,7 @@ export type FHEAuctionMockERC20TestParams = FHEAuctionMockTestBaseParams & {
 
 export type FHEBid = {
   bidder: HardhatEthersSigner;
-  id: bigint;
+  id?: bigint;
   price: bigint;
   quantity: bigint;
   startPaymentBalance?: bigint;
@@ -65,6 +69,11 @@ export type FHEBid = {
 
 export type FHEBids = Array<FHEBid>;
 
+export const TieBreakingRulePriceId = 0n;
+export const TieBreakingRulePriceQuantityId = 1n;
+export const TieBreakingRuleRandom = 2n;
+export const TieBreakingRuleProRata = 3n;
+
 ////////////////////////////////////////////////////////////////////////////////
 // FHEAuctionMockTestCtx
 ////////////////////////////////////////////////////////////////////////////////
@@ -72,7 +81,7 @@ export type FHEBids = Array<FHEBid>;
 export abstract class FHEAuctionMockTestCtx {
   auction: FHEAuction;
   auctionAddr: string;
-  engine: FHEAuctionEngineMock;
+  engine: FHEAuctionEngineBaseMock;
   engineAddr: string;
   auctionToken: AuctionERC20;
   auctionTokenAddr: string;
@@ -81,6 +90,8 @@ export abstract class FHEAuctionMockTestCtx {
   beneficiary: HardhatEthersSigner;
   fhevm: FhevmInstance;
   params: FHEAuctionParams;
+  iteratorAddr: string;
+  iterator: FHEAuctionEngineIterator | undefined;
 
   constructor(params: FHEAuctionMockTestParams) {
     this.auction = params.auction;
@@ -94,6 +105,20 @@ export abstract class FHEAuctionMockTestCtx {
     this.beneficiary = params.beneficiary;
     this.fhevm = params.fhevm;
     this.params = params.params;
+    this.iteratorAddr = hre.ethers.ZeroAddress;
+    this.iterator = undefined;
+  }
+
+  async init() {
+    this.iteratorAddr = await this.engine.iterator();
+    this.iterator = await hre.ethers.getContractAt(
+      "FHEAuctionEngineIterator",
+      this.iteratorAddr
+    );
+  }
+
+  getParams(): FHEAuctionParams {
+    return { ...this.params };
   }
 
   async getClearBidByBidder(
@@ -119,6 +144,10 @@ export abstract class FHEAuctionMockTestCtx {
     await this.engine.connect(this.owner).allowBids();
   }
 
+  engineIterator(): FHEAuctionEngineIterator {
+    return this.iterator!;
+  }
+
   async expectBidsToEqual(bids: FHEBids) {
     const bidCount = await this.engine.getBidCount();
     expect(bidCount).to.equal(bids.length);
@@ -131,7 +160,11 @@ export abstract class FHEAuctionMockTestCtx {
     }
   }
 
-  async bid(bidder: HardhatEthersSigner, price: bigint, quantity: bigint) {
+  async bid(
+    bidder: HardhatEthersSigner,
+    price: bigint,
+    quantity: bigint
+  ): Promise<ContractTransactionResponse> {
     const input = this.fhevm.createEncryptedInput(
       this.auctionAddr,
       bidder.address
@@ -140,9 +173,11 @@ export abstract class FHEAuctionMockTestCtx {
     input.add256(quantity);
     const enc = await input.encrypt();
 
-    await this.auction
+    const tx = await this.auction
       .connect(bidder)
       .bid(enc.handles[0], enc.handles[1], enc.inputProof);
+
+    return tx;
   }
 
   abstract placeBids(
@@ -171,8 +206,11 @@ export abstract class FHEAuctionMockTestCtx {
     await this.auction.connect(this.owner).start(durationSeconds, stoppable);
   }
 
-  async cancelBid(bidder: HardhatEthersSigner) {
-    await this.auction.connect(bidder).cancelBid();
+  async cancelBid(
+    bidder: HardhatEthersSigner
+  ): Promise<ContractTransactionResponse> {
+    const tx = await this.auction.connect(bidder).cancelBid();
+    return tx;
   }
 
   async expectRankedBidsToEqual(rankedBids: FHEBids) {
@@ -241,73 +279,129 @@ export abstract class FHEAuctionMockTestCtx {
     );
   }
 
-  async iterBidsValidation() {
-    expect(await this.engine.isBidsValidationComplete()).to.be.false;
+  // Step 1
+  async computeValidation() {
+    expect(await this.engine.validationCompleted()).to.be.false;
 
-    const max: bigint = await this.engine.bidsValidationProgressMax();
-    expect(await this.engine.bidsValidationProgress()).to.equal(0);
+    const max: bigint = await this.engine.validationProgressMax();
+    expect(await this.engine.validationProgress()).to.equal(0);
 
-    for (let i = 0; i < max; ++i) {
-      await this.engine.iterBidsValidation(1n, { gasLimit: 250_000n });
-      awaitCoprocessor();
-      expect(await this.engine.bidsValidationProgress()).to.equal(i + 1);
+    let gasLimit: bigint | undefined = 270_000n;
+    //@ts-ignore
+    if (hre.__SOLIDITY_COVERAGE_RUNNING) {
+      gasLimit = undefined;
     }
 
-    expect(await this.engine.isBidsValidationComplete()).to.be.true;
+    for (let i = 0; i < max; ++i) {
+      await this.engine.computeValidation(1n, { gasLimit });
+      await awaitCoprocessor();
+      expect(await this.engine.validationProgress()).to.equal(i + 1);
+    }
+
+    expect(await this.engine.validationCompleted()).to.be.true;
 
     await this.engine.connect(this.owner).allowBids();
-    awaitCoprocessor();
+    await awaitCoprocessor();
   }
 
-  async iterRankedBids() {
+  // Step 2
+  async computeSort() {
     const n = await this.engine.getBidCount();
     const N = n < 2 ? 1n : (n * (n - 1n)) / 2n;
 
-    const total = await this.engine.rankedBidsProgressMax();
-    expect(await this.engine.rankedBidsProgressMax()).to.equal(N);
+    const total = await this.engine.sortProgressMax();
+    expect(total).to.equal(N);
 
     for (let i = 0; i < total; ++i) {
-      await this.engine.iterRankedBids(1n); //N(N-1)/2
+      await this.engine.computeSort(1n); //N(N-1)/2
       await awaitCoprocessor();
-      expect(await this.engine.rankedBidsProgress()).to.equal(i + 1);
+      expect(await this.engine.sortProgress()).to.equal(i + 1);
     }
 
-    expect(await this.engine.isRankedBidsComplete()).to.be.true;
-    expect(await this.engine.rankedBidsProgress()).to.equal(total);
+    expect(await this.engine.sortCompleted()).to.be.true;
+    expect(await this.engine.sortProgress()).to.equal(total);
     await this.engine.connect(this.owner).allowRankedBids();
     await awaitCoprocessor();
 
     expect(await this.engine.canClaim()).to.be.false;
   }
 
-  async iterRankedWonQuantities() {
+  // Step 3
+  async computeWonQuantitiesByRank() {
     const n = await this.engine.getBidCount();
-    expect(await this.engine.rankedWonQuantitiesProgress()).to.equal(0n);
-    expect(await this.engine.isRankedWonQuantitiesComplete()).to.be.false;
+    expect(await this.engine.wonQuantitiesByRankProgress()).to.equal(0n);
+    expect(await this.engine.wonQuantitiesByRankReady()).to.be.false;
     for (let i = 0; i < n; ++i) {
-      expect(await this.engine.isRankedWonQuantitiesComplete()).to.be.false;
+      expect(await this.engine.wonQuantitiesByRankReady()).to.be.false;
       // Gas cost ~= 250_000
-      await this.engine.iterRankedWonQuantities(1n);
-      awaitCoprocessor();
-      expect(await this.engine.rankedWonQuantitiesProgress()).to.equal(
+      await this.engine.computeWonQuantitiesByRank(1n);
+      await awaitCoprocessor();
+      expect(await this.engine.wonQuantitiesByRankProgress()).to.equal(
         BigInt(i + 1)
       );
     }
-    expect(await this.engine.isRankedWonQuantitiesComplete()).to.be.true;
+    expect(await this.engine.wonQuantitiesByRankReady()).to.be.true;
     expect(await this.engine.canClaim()).to.be.false;
   }
 
-  async iterWonQuantities() {
-    expect(await this.engine.wonQuantitiesProgress()).to.equal(0);
-    expect(await this.engine.isWonQuantitiesComplete()).to.be.false;
+  async computeWonQuantitiesById() {
+    expect(await this.engine.wonQuantitiesByIdProgress()).to.equal(0);
+    expect(await this.engine.wonQuantitiesByIdReady()).to.be.false;
     const n = await this.engine.getBidCount();
+    expect(await this.engine.wonQuantitiesByIdProgressMax()).to.equal(n * n);
     for (let i = 0; i < n * n; ++i) {
-      await this.engine.iterWonQuantities(1n);
-      awaitCoprocessor();
-      expect(await this.engine.wonQuantitiesProgress()).to.equal(BigInt(i + 1));
+      await this.engine.computeWonQuantitiesById(1n);
+      await awaitCoprocessor();
+      expect(await this.engine.wonQuantitiesByIdProgress()).to.equal(
+        BigInt(i + 1)
+      );
     }
-    expect(await this.engine.isWonQuantitiesComplete()).to.be.true;
+    expect(await this.engine.wonQuantitiesByIdReady()).to.be.true;
     expect(await this.engine.canClaim()).to.be.true;
+  }
+
+  async iterUntilBlindClaimReady(iters?: number[]) {
+    const n = await this.engine.getBidCount();
+    const iterator: FHEAuctionEngineIterator = await hre.ethers.getContractAt(
+      "FHEAuctionEngineIterator",
+      await this.engine.iterator()
+    );
+    const minIter = await iterator.minIterationsForBlindClaim();
+    expect(await this.engine.canBlindClaim()).to.be.false;
+    expect(minIter).to.equal(n * (n + 1n));
+
+    if (iters !== undefined) {
+      for (let i = 0; i < iters.length; i++) {
+        await this.auction.computeAuction(iters[i], true);
+      }
+    } else {
+      for (let i = 0; i < minIter; i++) {
+        await this.auction.computeAuction(1, true);
+      }
+    }
+
+    expect(await this.engine.canBlindClaim()).to.be.true;
+    expect(await this.engineIterator().step()).to.equal(3);
+    expect(await this.engineIterator().stepProgress()).to.equal(0);
+  }
+
+  async computeAuctionIters(iters: number[]) {
+    const n = await this.engine.getBidCount();
+    const iterator: FHEAuctionEngineIterator = await hre.ethers.getContractAt(
+      "FHEAuctionEngineIterator",
+      await this.engine.iterator()
+    );
+    const maxIter = await iterator.iterProgressMax();
+    expect(await this.engine.canClaim()).to.be.false;
+    expect(maxIter).to.equal(n * (2n * n + 1n));
+
+    const minIter = await iterator.minIterationsForBlindClaim();
+    expect(await this.engine.canBlindClaim()).to.be.false;
+    expect(minIter).to.equal(n * (n + 1n));
+
+    for (let i = 0; i < iters.length; i++) {
+      await this.auction.computeAuction(iters[i], false);
+    }
   }
 
   async logRankedBids() {
@@ -340,6 +434,7 @@ export abstract class FHEAuctionMockTestCtx {
   }
 
   abstract paymentTokenBalanceOf(signer: HardhatEthersSigner): Promise<bigint>;
+  abstract minePaymentToken(bids: FHEBids): Promise<void>;
 
   abstract depositSingle(
     bidder: HardhatEthersSigner,
@@ -386,6 +481,157 @@ export abstract class FHEAuctionMockTestCtx {
     for (let i = 0; i < bids.length; ++i) {
       expect(await this.auctionTokenBalanceOf(bids[i].bidder)).to.equal(
         bids[i].wonQuantity!
+      );
+    }
+  }
+
+  fillBidsWithDefault(bids: FHEBids, expectedUniformPrice: bigint): FHEBids {
+    const newBids: FHEBids = [];
+    for (let i = 0; i < bids.length; ++i) {
+      newBids.push({ ...bids[i] });
+      if (newBids[i].id === undefined) {
+        newBids[i].id = BigInt(i + 1);
+      }
+      if (newBids[i].startPaymentBalance === undefined) {
+        newBids[i].startPaymentBalance = newBids[i].price * newBids[i].quantity;
+      }
+      if (newBids[i].paymentDeposit === undefined) {
+        newBids[i].paymentDeposit = newBids[i].price * newBids[i].quantity;
+      }
+      if (newBids[i].wonQuantity === undefined) {
+        newBids[i].wonQuantity = newBids[i].quantity;
+      }
+      if (newBids[i].endPaymentBalance === undefined) {
+        newBids[i].endPaymentBalance =
+          newBids[i].startPaymentBalance! -
+          newBids[i].wonQuantity! * expectedUniformPrice;
+      }
+    }
+    return newBids;
+  }
+
+  async run(
+    bids: FHEBids,
+    expectedUniformPrice: bigint,
+    expectedBeneficiaryCollect?: bigint
+  ) {
+    bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
+    const beneficiaryBalanceBefore = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    await this.minePaymentToken(bids);
+    await this.expectPaymentBalanceToEqualStart(bids);
+    await this.placeBidsWithDeposit(bids, true);
+    await this.expectPaymentBalancePlusDepositToEqual(bids);
+    await this.computeValidation();
+    await this.computeSort();
+    await this.computeWonQuantitiesByRank();
+    await this.computeWonQuantitiesById();
+    await this.auction.connect(this.owner).decryptUniformPrice();
+    await awaitAllDecryptionResults();
+    expect(await this.auction.clearUniformPrice()).to.equal(
+      expectedUniformPrice
+    );
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auction.connect(bids[i].bidder).claim());
+    }
+    await awaitAllDecryptionResults();
+    await this.expectWonQuantities(bids);
+    await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
+    const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    if (expectedBeneficiaryCollect != undefined) {
+      expect(beneficiaryBalanceAfter - beneficiaryBalanceBefore).to.equal(
+        expectedBeneficiaryCollect
+      );
+    }
+  }
+
+  async runBlind(
+    bids: FHEBids,
+    expectedUniformPrice: bigint,
+    expectedBeneficiaryCollect?: bigint
+  ) {
+    bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
+    const beneficiaryBalanceBefore = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    await this.minePaymentToken(bids);
+    await this.expectPaymentBalanceToEqualStart(bids);
+    await this.placeBidsWithDeposit(bids, true);
+    await this.expectPaymentBalancePlusDepositToEqual(bids);
+    await this.computeValidation();
+    await this.computeSort();
+    await this.computeWonQuantitiesByRank();
+    await this.auction.connect(this.owner).decryptUniformPrice();
+    await awaitAllDecryptionResults();
+    expect(await this.auction.clearUniformPrice()).to.equal(
+      expectedUniformPrice
+    );
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auction.connect(bids[i].bidder).blindClaimRank(i));
+    }
+    await awaitAllDecryptionResults();
+    await this.expectWonQuantities(bids);
+    await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
+    const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    if (expectedBeneficiaryCollect != undefined) {
+      expect(beneficiaryBalanceAfter - beneficiaryBalanceBefore).to.equal(
+        expectedBeneficiaryCollect
+      );
+    }
+  }
+
+  async runComputeAuctionIters(
+    bids: FHEBids,
+    expectedUniformPrice: bigint,
+    iters: number[]
+  ) {
+    bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
+    await this.minePaymentToken(bids);
+    await this.expectPaymentBalanceToEqualStart(bids);
+    await this.placeBidsWithDeposit(bids, true);
+    await this.expectPaymentBalancePlusDepositToEqual(bids);
+
+    await this.computeAuctionIters(iters);
+  }
+
+  async runBlindUsingComputeAuction(
+    bids: FHEBids,
+    expectedUniformPrice: bigint,
+    iters?: number[],
+    expectedBeneficiaryCollect?: bigint
+  ) {
+    bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
+    const beneficiaryBalanceBefore = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    await this.minePaymentToken(bids);
+    await this.expectPaymentBalanceToEqualStart(bids);
+    await this.placeBidsWithDeposit(bids, true);
+    await this.expectPaymentBalancePlusDepositToEqual(bids);
+
+    await this.iterUntilBlindClaimReady(iters);
+    await this.auction.connect(this.owner).decryptUniformPrice();
+    await awaitAllDecryptionResults();
+    expect(await this.auction.clearUniformPrice()).to.equal(
+      expectedUniformPrice
+    );
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auction.connect(bids[i].bidder).blindClaimRank(i));
+    }
+    await awaitAllDecryptionResults();
+    await this.expectWonQuantities(bids);
+    await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
+    const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
+      this.beneficiary
+    );
+    if (expectedBeneficiaryCollect != undefined) {
+      expect(beneficiaryBalanceAfter - beneficiaryBalanceBefore).to.equal(
+        expectedBeneficiaryCollect
       );
     }
   }
@@ -438,6 +684,26 @@ export class FHEAuctionNativeMockTestCtx extends FHEAuctionMockTestCtx {
       });
   }
 
+  async placeSingleBid(bid: FHEBid, deposit: boolean, stop: boolean) {
+    if (deposit) {
+      const minimumDeposit = await this.auction.minimumDeposit();
+      let deposit = bid.price * bid.quantity;
+      if (deposit < minimumDeposit) {
+        deposit = minimumDeposit;
+      }
+      await this.approvePaymentDeposit(bid.bidder, deposit);
+      await this.auctionNative.connect(bid.bidder).deposit({
+        value: deposit,
+      });
+    }
+
+    await this.bid(bid.bidder, bid.price, bid.quantity);
+
+    if (stop) {
+      await this.auction.connect(this.owner).stop();
+    }
+  }
+
   async placeBids(bids: FHEBids, deposit: boolean, stop: boolean) {
     if (deposit) {
       const minimumDeposit = await this.auction.minimumDeposit();
@@ -467,6 +733,7 @@ export class FHEAuctionNativeMockTestCtx extends FHEAuctionMockTestCtx {
   }
 
   async approvePaymentDeposit(bidder: HardhatEthersSigner, amount: bigint) {}
+  async minePaymentToken(bids: FHEBids) {}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

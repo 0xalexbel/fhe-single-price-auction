@@ -1,3 +1,122 @@
+# Howto
+
+```
+1_000_000 wei = 0.001 Gwei = 0,000000000001 ETH
+100_000 Gas (Gas Price 35 Gwei)= 3_500_000 Gwei = 0,0035 ETH
+1_000_000 Gas (Gas Price 35 Gwei)= 35_000_000 Gwei = 0,035 ETH
+10_000_000 Gas (Gas Price 35 Gwei)= 350_000_000 Gwei = 0,35 ETH
+```
+
+```bash
+# Alice: beneficiary index = 1, auction quantity 1_000_000
+npx hardhat --network localhost erc20 transfer --token payment --to <bidder account index> --amount <bid price * bid quantity>
+npx hardhat --network localhost erc20 transfer --token payment --to <bidder account index> --price <bid price> --quantity <bid quantity>
+```
+
+## Step 1 : Deploy factories
+
+```
+- Deployer account index : 0
+- Alice: Benificiary account index : 1
+- Bob account index : 2 (price: 0.0000002 ether per token for 500,000 tokens)
+- Carol account index : 3
+- David account index : 4
+- Quantity : 1_000_000
+```
+
+```bash
+npx hardhat --network localhost deploy --gas-report
+```
+
+## Step 2 : Give everyone enough ETH to pay for gas
+
+```bash
+# Alice
+npx hardhat --network localhost eth transfer --to-index 1 --amount 1eth
+# Bob
+npx hardhat --network localhost eth transfer --to-index 2 --amount 1eth
+# Carol
+npx hardhat --network localhost eth transfer --to-index 3 --amount 1eth
+# David
+npx hardhat --network localhost eth transfer --to-index 4 --amount 1eth
+```
+
+## Step 2 : Give the beneficiary enough auction ERC20 tokens to be sold during the auction
+
+```bash
+# Alice: beneficiary index = 1, auction quantity 1_000_000
+npx hardhat --network localhost erc20 transfer --token auction --to 1 --amount 1000000
+```
+
+## Step 3 : Give the bidders enough payment ERC20 tokens required to pay for the auction prizes
+
+```bash
+# Bob
+npx hardhat --network localhost erc20 transfer --token payment --to 2 --price 2000000000000 --quantity 500000
+# Carol
+npx hardhat --network localhost erc20 transfer --token payment --to 3 --price 8000000000000 --quantity 600000
+# David
+npx hardhat --network localhost erc20 transfer --token payment --to 4 --price 10000000 --quantity 1000000
+```
+
+```bash
+# Alice's balance (auction)
+npx hardhat --network localhost erc20 balance --token auction --account 1
+# Bob's balance (payment)
+npx hardhat --network localhost erc20 balance --token payment --account 2
+# Carol's balance (payment)
+npx hardhat --network localhost erc20 balance --token payment --account 3
+# David's balance (payment)
+npx hardhat --network localhost erc20 balance --token payment --account 4
+```
+
+## Step 4 : Create new auction
+
+```bash
+npx hardhat --network localhost auction create --type erc20 --beneficiary 1 --salt MyFHEAuction1 --quantity 123 --auction-token 0x8BCFF502d53Fe73189b79b0544F25e55B3a92350 --minimum-payment-deposit 1000 --payment-penalty 500
+```
+
+```bash
+npx hardhat --network localhost auction create --type erc20 --owner 1 --beneficiary 1 --salt hello --quantity 1000000 --minimum-payment-deposit 1000000 --payment-penalty 500
+```
+
+```bash
+npx hardhat --network localhost auction start --beneficiary 1 --salt MyFHEAuction1 --duration 1000 --stoppable true
+```
+
+      const expectedUniformPrice = 2_000_000_000_000n;
+      const expectedBeneficiaryCollect = hre.ethers.parseUnits("2.0", "ether");
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          id: 1n,
+          price: 2_000_000_000_000n, //0.000002 ETH
+          quantity: 500_000n,
+          startPaymentBalance: 2_000_000_000_000n * 500_000n,
+          paymentDeposit: 2_000_000_000_000n * 500_000n,
+          wonQuantity: 400_000n,
+        },
+        {
+          bidder: bidders[1],
+          id: 2n,
+          price: 8_000_000_000_000n, //0.000008 ETH
+          quantity: 600_000n,
+          startPaymentBalance: 8_000_000_000_000n * 600_000n,
+          paymentDeposit: 8_000_000_000_000n * 600_000n,
+          wonQuantity: 600_000n,
+        },
+        {
+          bidder: bidders[2],
+          id: 3n,
+          price: 10_000_000n, //0.00000000001 ETH
+          quantity: 1_000_000n,
+          startPaymentBalance: 10_000_000n * 1_000_000n,
+          endPaymentBalance: 10_000_000n * 1_000_000n,
+          paymentDeposit: 10_000_000n * 1_000_000n,
+          wonQuantity: 0n,
+        },
+      ];
+
 # Hardhat Template [![Open in Gitpod][gitpod-badge]][gitpod] [![Github Actions][gha-badge]][gha] [![Hardhat][hardhat-badge]][hardhat] [![License: MIT][license-badge]][license]
 
 [gitpod]: https://gitpod.io/#https://github.com/zama-ai/fhevm-hardhat-template
@@ -134,7 +253,6 @@ Lint the TypeScript code:
 pnpm lint:ts
 ```
 
-
 ### Clean
 
 Delete the smart contract artifacts, the coverage reports and the Hardhat cache:
@@ -182,33 +300,41 @@ npx hardhat test [PATH_TO_YOUR_TEST] --network sepolia
 The `--network sepolia` flag will make your test run on a real fhevm coprocessor. Obviously, for the same tests to pass on Sepolia, contrarily to mocked mode, you are not allowed to use any hardhat node specific method, and neither use any of the `debug.decrypt[XX]` functions.
 
 > [!Note]
-> For this test to succeed, first ensure you set your own private `MNEMONIC` variable in the `.env` file and then  ensure you have funded your test accounts on Sepolia. For example you can use the following command to get the corresponding private keys associated with the first `5` accounts derived from the mnemonic: 
+> For this test to succeed, first ensure you set your own private `MNEMONIC` variable in the `.env` file and then ensure you have funded your test accounts on Sepolia. For example you can use the following command to get the corresponding private keys associated with the first `5` accounts derived from the mnemonic:
+
 ```
 npx hardhat get-accounts --num-accounts 5
 ```
-This will let you add them to the Metamask app, to easily fund them from your personal wallet. 
+
+This will let you add them to the Metamask app, to easily fund them from your personal wallet.
 
 If you don't own already Sepolia test tokens, you can for example use a free faucet such as [https://sepolia-faucet.pk910.de/](https://sepolia-faucet.pk910.de/).
 
 Another faster way to test the coprocessor on Sepolia is to simply run the following command:
+
 ```
 pnpm deploy-sepolia
 ```
-This would automatically deploy an instance of the `MyConfidentialERC20` example contract on Sepolia. You could then use this other command to mint some amount of confidential tokens: 
+
+This would automatically deploy an instance of the `MyConfidentialERC20` example contract on Sepolia. You could then use this other command to mint some amount of confidential tokens:
+
 ```
 pnpm mint-sepolia
 ```
 
 ### Etherscan verification
 
-If you are using a real instance of the fhEVM, you can verify your deployed contracts on the Etherscan explorer. 
-You first need to set the `ETHERSCAN_API_KEY` variable in the `.env` file to a valid value. You can get such an API key for free by creating an account on the [Etherscan website](https://docs.etherscan.io/getting-started/viewing-api-usage-statistics). 
+If you are using a real instance of the fhEVM, you can verify your deployed contracts on the Etherscan explorer.
+You first need to set the `ETHERSCAN_API_KEY` variable in the `.env` file to a valid value. You can get such an API key for free by creating an account on the [Etherscan website](https://docs.etherscan.io/getting-started/viewing-api-usage-statistics).
 
 Then, simply use the `verify-deployed` hardhat task, via this command:
+
 ```
 npx hardhat verify-deployed --address [ADDRESS_CONTRACT_TO_VERIFY] --contract [FULL_CONTRACT_PATH] --args "[CONSTRUCTOR_ARGUMENTS_COMMA_SEPARATED]" --network [NETWORK_NAME]
 ```
+
 As a concrete example, to verify the deployed `MyConfidentialERC20` from previous section, you can use:
+
 ```
 npx hardhat verify-deployed --address [CONFIDENTIAL_ERC20_ADDRESS] --contract contracts/MyConfidentialERC20.sol:MyConfidentialERC20 --args "Naraggara,NARA" --network sepolia
 ```

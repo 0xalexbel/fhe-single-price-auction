@@ -13,6 +13,12 @@ import CustomProvider from "./CustomProvider";
 import "./tasks/accounts";
 import "./tasks/etherscanVerify";
 import "./tasks/mintMyConfidentialERC20";
+import "./tasks/paymentERC20Token";
+import "./tasks/auctionERC20Token";
+import "./tasks/ethToken";
+import "./tasks/auctionFactory";
+import "./tasks/auction";
+import "./tasks/erc20";
 import { setCodeMocked } from "./test/mockedSetup";
 import "solidity-docgen";
 

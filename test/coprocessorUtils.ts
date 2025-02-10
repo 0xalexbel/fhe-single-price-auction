@@ -18,12 +18,22 @@ let counterRand = 0;
 //const db = new Database('./sql.db'); // on-disk db for debugging
 const db = new Database(":memory:");
 
-export function insertSQL(handle: string, clearText: bigint, replace: boolean = false) {
+export function insertSQL(
+  handle: string,
+  clearText: bigint,
+  replace: boolean = false
+) {
   if (replace) {
     // this is useful if using snapshots while sampling different random numbers on each revert
-    db.run("INSERT OR REPLACE INTO ciphertexts (handle, clearText) VALUES (?, ?)", [handle, clearText.toString()]);
+    db.run(
+      "INSERT OR REPLACE INTO ciphertexts (handle, clearText) VALUES (?, ?)",
+      [handle, clearText.toString()]
+    );
   } else {
-    db.run("INSERT OR IGNORE INTO ciphertexts (handle, clearText) VALUES (?, ?)", [handle, clearText.toString()]);
+    db.run(
+      "INSERT OR IGNORE INTO ciphertexts (handle, clearText) VALUES (?, ?)",
+      [handle, clearText.toString()]
+    );
   }
 }
 
@@ -37,25 +47,33 @@ export const getClearText = async (handle: bigint): Promise<string> => {
     const maxRetries = 100;
 
     function executeQuery() {
-      db.get("SELECT clearText FROM ciphertexts WHERE handle = ?", [handleStr], (err, row) => {
-        if (err) {
-          reject(new Error(`Error querying database: ${err.message}`));
-        } else if (row) {
-          resolve(row.clearText);
-        } else if (attempts < maxRetries) {
-          attempts++;
-          executeQuery();
-        } else {
-          reject(new Error("No record found after maximum retries"));
+      db.get(
+        "SELECT clearText FROM ciphertexts WHERE handle = ?",
+        [handleStr],
+        (err, row) => {
+          if (err) {
+            reject(new Error(`Error querying database: ${err.message}`));
+          } else if (row) {
+            resolve(row.clearText);
+          } else if (attempts < maxRetries) {
+            attempts++;
+            executeQuery();
+          } else {
+            reject(new Error("No record found after maximum retries"));
+          }
         }
-      });
+      );
     }
 
     executeQuery();
   });
 };
 
-db.serialize(() => db.run("CREATE TABLE IF NOT EXISTS ciphertexts (handle BINARY PRIMARY KEY,clearText TEXT)"));
+db.serialize(() =>
+  db.run(
+    "CREATE TABLE IF NOT EXISTS ciphertexts (handle BINARY PRIMARY KEY,clearText TEXT)"
+  )
+);
 
 interface FHEVMEvent {
   eventName: string;
@@ -160,7 +178,9 @@ async function processAllPastTFHEExecutorEvents() {
 
   if (hre.__SOLIDITY_COVERAGE_RUNNING !== true) {
     // evm_snapshot is not supported in coverage mode
-    [lastBlockSnapshot, lastCounterRand] = await provider.send("get_lastBlockSnapshot");
+    [lastBlockSnapshot, lastCounterRand] = await provider.send(
+      "get_lastBlockSnapshot"
+    );
     if (lastBlockSnapshot < firstBlockListening) {
       firstBlockListening = lastBlockSnapshot + 1;
       counterRand = Number(lastCounterRand);
@@ -374,12 +394,16 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       clearLHS = await getClearText(event.args[0]);
       if (event.args[2] === "0x01") {
         shift = event.args[1] % NumBits[resultType];
-        clearText = (BigInt(clearLHS) << shift) | (BigInt(clearLHS) >> (NumBits[resultType] - shift));
+        clearText =
+          (BigInt(clearLHS) << shift) |
+          (BigInt(clearLHS) >> (NumBits[resultType] - shift));
         clearText = clearText % 2n ** NumBits[resultType];
       } else {
         clearRHS = await getClearText(event.args[1]);
         shift = BigInt(clearRHS) % NumBits[resultType];
-        clearText = (BigInt(clearLHS) << shift) | (BigInt(clearLHS) >> (NumBits[resultType] - shift));
+        clearText =
+          (BigInt(clearLHS) << shift) |
+          (BigInt(clearLHS) >> (NumBits[resultType] - shift));
         clearText = clearText % 2n ** NumBits[resultType];
       }
       insertSQL(handle, clearText);
@@ -391,12 +415,16 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       clearLHS = await getClearText(event.args[0]);
       if (event.args[2] === "0x01") {
         shift = event.args[1] % NumBits[resultType];
-        clearText = (BigInt(clearLHS) >> shift) | (BigInt(clearLHS) << (NumBits[resultType] - shift));
+        clearText =
+          (BigInt(clearLHS) >> shift) |
+          (BigInt(clearLHS) << (NumBits[resultType] - shift));
         clearText = clearText % 2n ** NumBits[resultType];
       } else {
         clearRHS = await getClearText(event.args[1]);
         shift = BigInt(clearRHS) % NumBits[resultType];
-        clearText = (BigInt(clearLHS) >> shift) | (BigInt(clearLHS) << (NumBits[resultType] - shift));
+        clearText =
+          (BigInt(clearLHS) >> shift) |
+          (BigInt(clearLHS) << (NumBits[resultType] - shift));
         clearText = clearText % 2n ** NumBits[resultType];
       }
       insertSQL(handle, clearText);
@@ -535,7 +563,8 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
     case "Cast":
       resultType = parseInt(event.args[1]);
       handle = ethers.toBeHex(event.args[2], 32);
-      clearText = BigInt(await getClearText(event.args[0])) % 2n ** NumBits[resultType];
+      clearText =
+        BigInt(await getClearText(event.args[0])) % 2n ** NumBits[resultType];
       insertSQL(handle, clearText);
       break;
 
@@ -599,7 +628,9 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
   }
 }
 
-export function getFHEGasFromTxReceipt(receipt: ethers.TransactionReceipt): number {
+export function getFHEGasFromTxReceipt(
+  receipt: ethers.TransactionReceipt
+): number {
   if (hre.network.name !== "hardhat") {
     throw Error("FHEGas tracking is currently implemented only in mocked mode");
   }
@@ -616,7 +647,11 @@ export function getFHEGasFromTxReceipt(receipt: ethers.TransactionReceipt): numb
         topics: log.topics,
         data: log.data,
       });
-      return abi.some((item) => item.startsWith(`event ${parsedLog.name}`) && parsedLog.name !== "VerifyCiphertext");
+      return abi.some(
+        (item) =>
+          item.startsWith(`event ${parsedLog.name}`) &&
+          parsedLog.name !== "VerifyCiphertext"
+      );
     } catch {
       return false;
     }

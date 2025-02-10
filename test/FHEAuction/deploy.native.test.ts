@@ -3,12 +3,17 @@ import hre from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { ERC20 } from "../../types";
-import { FHEBids, FHEAuctionNativeMockTestCtx } from "./utils";
-import { deployNativeAuctionFixture } from "./fixtures";
+import {
+  FHEBids,
+  FHEAuctionNativeMockTestCtx,
+  TieBreakingRulePriceId,
+} from "./utils";
+import { deployNativeAuctionMockFixture } from "./fixtures";
 
+const DEFAULT_MAX_BID_COUNT = 10000n;
 const DEFAULT_QUANTITY = 12345n;
 const DEFAULT_DURATION = 86400n;
-const DEFAULT_TIE_BREAKING_RULE = 2n; //PriceId
+const DEFAULT_TIE_BREAKING_RULE = TieBreakingRulePriceId;
 const DEFAULT_MIN_PAYMENT_DEPOSIT = 100n;
 const DEFAULT_PAYMENT_PENALTY = 70n;
 const DEFAULT_STOPPABLE = true;
@@ -21,9 +26,10 @@ describe("deploy.native", () => {
   let other: HardhatEthersSigner;
 
   async function fixture() {
-    return deployNativeAuctionFixture(
+    return deployNativeAuctionMockFixture(
       DEFAULT_QUANTITY,
       DEFAULT_DURATION,
+      DEFAULT_MAX_BID_COUNT,
       DEFAULT_TIE_BREAKING_RULE,
       DEFAULT_MIN_PAYMENT_DEPOSIT,
       DEFAULT_PAYMENT_PENALTY,
