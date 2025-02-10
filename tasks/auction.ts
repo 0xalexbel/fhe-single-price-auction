@@ -524,6 +524,13 @@ declareAuctionTask(
       );
     }
 
+    const clearUniformPrice = await auction.base.clearUniformPrice();
+    if (clearUniformPrice === 0n) {
+      throw new FHEAuctionError(
+        "Auction is not ready for blind claim. Call 'decrypt-uniform-price' command first."
+      );
+    }
+
     if (!(await auction.base.connect(resolvedBidder.signer).canBlindClaim())) {
       throw new FHEAuctionError("Auction is not ready for blind claim");
     }
