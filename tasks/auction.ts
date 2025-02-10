@@ -630,7 +630,15 @@ declareAuctionTask(
       await auction.base.totalBlindClaimsRequested();
     const clearUniformPrice = await auction.base.clearUniformPrice();
 
+    const minIterForBlindClaim =
+      await auction.base.minIterationsForBlindClaim();
+    const minIterForClaim = await auction.base.minIterationsForClaim();
+    const computedIter = await auction.base.computedIterations();
+
     console.info(`Clear uniform prize          : ${clearUniformPrice}`);
+    console.info(
+      `Computed iterations          : ${computedIter} (blind claim: ${minIterForBlindClaim}, direct claim: ${minIterForClaim})`
+    );
     console.info(
       `Total claims completed       : ${totalClaimsCompleted} / ${bidCount}`
     );
