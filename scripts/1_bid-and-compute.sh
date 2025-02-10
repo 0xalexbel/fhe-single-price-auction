@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Edit the auction address accordingly
 AUCTION_ADDR=0xf5ed4A9692e63fAf16FE4b57EA8970Db23e28A51
 
 # Start auction

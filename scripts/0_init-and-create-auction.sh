@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# WARNING!
+# Before proceeding, a node instance must be launched.
+# `npx hardhat node --gasprice 79843044542`
+
 # Alice = beneficiary = 1
 npx hardhat --network localhost eth set-min-balance --account 1 --min 10001eth
 # Bob = 2
