@@ -8,6 +8,7 @@ export const SCOPE_AUCTION_TASK_COMPUTE = "compute";
 export const SCOPE_AUCTION_TASK_BLINDCLAIM = "blind-claim";
 export const SCOPE_AUCTION_TASK_CLAIM = "claim";
 export const SCOPE_AUCTION_TASK_CLAIM_INFO = "claim-info";
+export const SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE = "decrypt-uniform-price";
 
 export const SCOPE_AUCTION = "auction";
 export const SCOPE_ERC20 = "erc20";

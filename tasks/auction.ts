@@ -27,6 +27,7 @@ import {
   SCOPE_AUCTION_TASK_CANBID,
   SCOPE_AUCTION_TASK_CLAIM_INFO,
   SCOPE_AUCTION_TASK_COMPUTE,
+  SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE,
   SCOPE_AUCTION_TASK_INFO,
 } from "./task-names";
 
@@ -555,6 +556,54 @@ declareAuctionTask(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
+// Decrypt uniform price
+////////////////////////////////////////////////////////////////////////////////
+
+declareAuctionTask(
+  auctionScope
+    .task(SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE, "Decrypt uniform price")
+    .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint),
+  async function (
+    auction: FHEAuctionResolution,
+    taskArguments: TaskArguments,
+    hre: HardhatRuntimeEnvironment
+  ) {
+    const resolvedSigners = await resolveAuctionSigners(hre, auction.base);
+
+    const clearUniformPrice = await auction.base.clearUniformPrice();
+    if (clearUniformPrice > 0) {
+      if (auction.isNative) {
+        console.info(
+          `✅ Auction ${auction.address} uniform price is already decrypted: ${clearUniformPrice}`
+        );
+      } else {
+        console.info(
+          `✅ Auction ${auction.address} uniform price is already decrypted: ${clearUniformPrice} Wei`
+        );
+      }
+      return;
+    }
+
+    if (
+      !(await auction.base
+        .connect(resolvedSigners.owner)
+        .canDecryptUniformPrice())
+    ) {
+      throw new FHEAuctionError(
+        "Auction's uniform price is not ready for decryption"
+      );
+    }
+
+    const tx = await auction.base
+      .connect(resolvedSigners.owner)
+      .decryptUniformPrice({ gasLimit: taskArguments.gasLimit });
+    const receipt = await tx.wait(1);
+
+    logGas(hre, receipt, `Decrypt uniform price`);
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
 // Count
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -572,7 +621,9 @@ declareAuctionTask(
     const totalClaimsCompleted = await auction.base.totalClaimsCompleted();
     const totalBlindClaimsRequested =
       await auction.base.totalBlindClaimsRequested();
+    const clearUniformPrice = await auction.base.clearUniformPrice();
 
+    console.info(`Clear uniform prize          : ${clearUniformPrice}`);
     console.info(
       `Total claims completed       : ${totalClaimsCompleted} / ${bidCount}`
     );

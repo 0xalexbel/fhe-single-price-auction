@@ -6,7 +6,7 @@ Three tokens are involved in the following test.
 2. AuctionERC20 (AUC) the pre-deployed ERC20 token put up for auction by Alice the beneficiary
 3. PaymentERC20 (PAY) the pre-deployed ERC20 token used for auction payments
 
-### Wallets ETH balance setup
+### Step 1: Wallets ETH balance setup
 
 The wallets of Alice, Bob, Carol and David must be topped up with at least 1.0 ETH to proceed.
 
@@ -21,14 +21,14 @@ npx hardhat --network sepolia eth set-min-balance --min 1000000000000000000 --ac
 npx hardhat --network sepolia eth set-min-balance --min 1000000000000000000 --account 4
 ```
 
-### Wallets AUC (AuctionERC20) balance setup
+### Step 2: Wallets AUC (AuctionERC20) balance setup
 
 ```bash
 # Set Alice=1 balance to 1000000 AUC (1000000 is the future quantity of token put up for auction)
 npx hardhat --network sepolia erc20 transfer --token auction --to 1 --amount 1000000
 ```
 
-### Wallets PAY (PaymentERC20) balance setup
+### Step 3: Wallets PAY (PaymentERC20) balance setup
 
 ```bash
 # Set Bob=2 balance to 100000000000000000 AUC (price * quantity = 200000000000 * 500000)
@@ -39,7 +39,7 @@ npx hardhat --network sepolia erc20 transfer --token payment --to 3 --price 8000
 npx hardhat --network sepolia erc20 transfer --token payment --to 4 --price 1000000 --quantity 1000000
 ```
 
-### Create a new auction
+### Step 4: Create a new auction
 
 ```bash
 # Gas used : 7_485_470
@@ -53,7 +53,7 @@ Output:
 🚀 New ERC20 auction at address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B has been successfully created.
 ```
 
-### Start the new auction
+### Step 5: Start the new auction
 
 - Once everything is set up, we can start the new auction and open it for bidders. Note that, by default, an auction is always flagged as manually stoppable,
   meaning the auction owner can call the stop command.
@@ -98,7 +98,7 @@ David's bid Tx: 0x66dfd2aa632b1bb1f932e20a3e23171cfee490459297254856496a4a31d566
 > `Error: Gateway didn't response correctly`. This is usually due potential issues on Zama's Gateway server (server down or facing internal issues).
 > In such a case the test on sepolia is not possible.
 
-### Stop the auction
+### Step 6: Stop the auction
 
 ```bash
 # Gas used 177_147
@@ -107,7 +107,7 @@ npx hardhat --network sepolia auction stop --address 0xBb007ACDd6d18be638bC0B58b
 
 Sepolia Tx: 0xe45135c09812e22ba02486ad0b84d1d73594d4c44e40a0311e3a2852ee411805
 
-### Compute the auction
+### Step 7: Compute the auction
 
 > [!WARNING]  
 > A gas limit must be specified : minimum 1_000_000
@@ -129,13 +129,58 @@ npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B
 npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --blind-claim
 ```
 
-### Blind Claim prizes
+### Step 8: Decrypt uniform prize
 
 ```bash
-# Bob's blind claim: Gas used: 347_756 (Tx: 0x06013e305cf689ac977af2ca1e9cb2c737594e1a4a528b99001916943f1dab12)
+# Gas used: 190_939
+npx hardhat --network sepolia auction decrypt-uniform-price --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+```
+
+To check if the uniform price has been decrypted:
+
+```bash
+npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+```
+
+### Step 9: Blind Claim prizes
+
+```bash
+# Bob's blind claim
 npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 2
-# Carol's blind claim: Gas used: 350_556 (Tx: 0xeb3a53d9e9aa71c546e11180ac2851ac3995afbc09d2fb336f4ae7e009157ed8)
+# Carol's blind claim
 npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 3
-# David's blind claim: Gas used: 350_556 (Tx: 0x8f4186e91a047e0f174c78af533e00790ab3a01dc07a982422712975617101aa)
+# David's blind claim
 npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 4
 ```
+
+To check blind claim progress:
+
+```bash
+npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+```
+
+### Step 10: Prizes verification
+
+```bash
+npx hardhat --network sepolia erc20 balance --token auction --account 2
+npx hardhat --network sepolia erc20 balance --token auction --account 3
+npx hardhat --network sepolia erc20 balance --token auction --account 4
+```
+
+Output:
+
+```bash
+ERC20 Balance : 400000 (AUC) (account: 0x3f0CdAe6ebd93F9F776BCBB7da1D42180cC8fcC1)
+```
+
+```bash
+ERC20 Balance : 600000 (AUC) (account: 0x28e2bD235e7831b71AF247D452340B6127627131)
+```
+
+```bash
+ERC20 Balance : 0 (AUC) (account: 0x619b83dD7F04a151bC317475B91C80dC02E33d3A)
+```
+
+- 🥇 Bod has won 400_000 AUC Tokens
+- 🥈 Carol has won 600_000 AUC Tokens
+- 🥉 David has won 0 AUC Tokens
