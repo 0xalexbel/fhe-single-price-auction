@@ -10,6 +10,10 @@ pnpm install
 npx hardhat test
 ```
 
+# Algorithm
+
+For more information about the architecture and the algorithm, see [contracts/engines/FHEAuctionEngine.sol](https://github.com/0xalexbel/fhe-single-price-auction/blob/14c7121b1dee13cbef8224a096d9ded8a45aaaa2/contracts/engines/FHEAuctionEngine.sol) contract commentary.
+
 # Tutorial
 
 ## Setting up the environment
