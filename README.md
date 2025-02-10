@@ -1,3 +1,17 @@
+# Install
+
+```bash
+pnpm install
+```
+
+# Test
+
+```bash
+npx hardhat test
+```
+
+# Tutorial
+
 ## Setting up the environment
 
 Three tokens are involved in the following test.
