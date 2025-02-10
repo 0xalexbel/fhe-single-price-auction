@@ -18,6 +18,7 @@ For more information about the architecture and the algorithm, see [contracts/en
 
 - ProRata tie-breaking mode is not yet implemeneted.
 - Better incorporate the uniform price decryption pass into the computation flow.
+- Add direct claim command (as opposed to blind claim)
 
 # Tutorial
 
