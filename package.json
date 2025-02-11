@@ -1,7 +1,8 @@
 {
-  "name": "fhevm-hardhat-foundry-template",
-  "description": "fhEVM hardhat foundry template",
-  "version": "0.6.2",
+  "name": "fhe-single-price-auction",
+  "description": "Single Price Auction contracts using Zama's fhEVM",
+  "version": "0.1.1",
+  "homepage": "https://github.com/0xalexbel/fhe-single-price-auction",
   "engines": {
     "node": ">=20.0.0"
   },
