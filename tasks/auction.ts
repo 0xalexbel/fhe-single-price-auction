@@ -14,6 +14,7 @@ import {
   depositOrThrow,
   FHEAuctionResolution,
   logGas,
+  parseAllEvents,
   parseComputeEvents,
   resolveAuctionOrThrow,
   resolveAuctionSigners,
@@ -22,20 +23,20 @@ import {
 } from "./utils";
 import { FHEAuctionError } from "./error";
 import {
+  SCOPE_AUCTION_TASK_AWARD,
   SCOPE_AUCTION_TASK_BID,
-  SCOPE_AUCTION_TASK_BLINDCLAIM,
+  SCOPE_AUCTION_TASK_BLIND_CLAIM,
   SCOPE_AUCTION_TASK_CANBID,
+  SCOPE_AUCTION_TASK_CLAIM,
   SCOPE_AUCTION_TASK_CLAIM_INFO,
   SCOPE_AUCTION_TASK_COMPUTE,
   SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE,
   SCOPE_AUCTION_TASK_INFO,
 } from "./task-names";
+import { FHEAuctionEngine } from "../types";
+import { awaitAllDecryptionResults } from "../test/asyncDecrypt";
 
 const auctionScope = scope("auction", "Auction related commands");
-
-////////////////////////////////////////////////////////////////////////////////
-// Infos
-////////////////////////////////////////////////////////////////////////////////
 
 export type FHEAuctionActionType<TaskArgumentsT extends TaskArguments> = (
   auction: FHEAuctionResolution,
@@ -136,7 +137,7 @@ declareAuctionTask(
       `Maximum bid count              : ${await auction.base.maximumBidCount()}`
     );
     console.info(
-      `Min iterations for blind claim : ${await auction.base.minIterationsForBlindClaim()}`
+      `Min iterations for blind claim : ${await auction.base.minIterationsForPrizeAward()}`
     );
     console.info(
       `Computed iterations            : ${await auction.base.computedIterations()}`
@@ -401,7 +402,7 @@ declareAuctionTask(
     .task(SCOPE_AUCTION_TASK_COMPUTE, "Compute auction")
     .addParam("worker", "Worker address")
     .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint)
-    .addFlag("blindClaim", "Stops when the auction is ready for blind claim")
+    .addFlag("award", "Stops when the auction is ready for prize award")
     .addOptionalParam(
       "count",
       "Number of working cycles",
@@ -420,18 +421,18 @@ declareAuctionTask(
       );
     }
 
-    const minIterForBlindClaim =
-      await auction.base.minIterationsForBlindClaim();
+    const minIterForPrizeAward =
+      await auction.base.minIterationsForPrizeAward();
     const minIterForClaim = await auction.base.minIterationsForClaim();
     const computedIter = await auction.base.computedIterations();
 
-    const maxIter = taskArguments.blindClaim
-      ? minIterForBlindClaim
+    const maxIter = taskArguments.award
+      ? minIterForPrizeAward
       : minIterForClaim;
 
     if (computedIter >= maxIter) {
-      if (taskArguments.blindClaim) {
-        console.info(`✅ Auction ${auction.address} is ready for blind claim`);
+      if (taskArguments.award) {
+        console.info(`✅ Auction ${auction.address} is ready to award prizes`);
       } else {
         console.info(`✅ Auction ${auction.address} is ready for claim`);
       }
@@ -440,7 +441,6 @@ declareAuctionTask(
 
     const worker = await resolveSignerOrThrow(
       hre,
-      auction.base,
       taskArguments.worker,
       "Invalid --worker argument."
     );
@@ -459,33 +459,36 @@ declareAuctionTask(
 
     const tx = await auction.base
       .connect(worker)
-      .computeAuction(taskArguments.count, taskArguments.blindClaim, {
+      .computeAuction(taskArguments.count, taskArguments.award, {
         gasLimit: taskArguments.gasLimit,
       });
 
     const receipt = await tx.wait(1);
+
     const report = parseComputeEvents(receipt!, auction.base);
+
+    await awaitAllDecryptionResults(hre);
 
     logGas(hre, receipt, `Compute`);
 
     console.info(`Compute : Num cycles : ${report.computedCycles}`);
-    if (taskArguments.blindClaim) {
+    if (taskArguments.award) {
       console.info(
-        `Compute : Progress   : ${
+        `🛺 Compute : Progress   : ${
           (report.endProgress * 100n) / maxIter
-        }% (before ready for blind claim)`
+        }% (before ready to award prizes)`
       );
     } else {
       console.info(
-        `Compute : Progress   : ${
+        `🛺 Compute : Progress   : ${
           (report.endProgress * 100n) / maxIter
         }% (before ready for claim)`
       );
     }
 
     if (report.endProgress >= maxIter) {
-      if (taskArguments.blindClaim) {
-        console.info(`✅ Auction ${auction.address} is ready for blind claim`);
+      if (taskArguments.award) {
+        console.info(`✅ Auction ${auction.address} is ready to award prizes`);
       } else {
         console.info(`✅ Auction ${auction.address} is ready for claim`);
       }
@@ -494,14 +497,14 @@ declareAuctionTask(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
-// Blind claim
+// Blind claim (Experimental)
 ////////////////////////////////////////////////////////////////////////////////
 
 declareAuctionTask(
   auctionScope
     .task(
-      SCOPE_AUCTION_TASK_BLINDCLAIM,
-      "Blind claim. Each registered bidder can perform a blind claim. (Beta version)"
+      SCOPE_AUCTION_TASK_BLIND_CLAIM,
+      "(Experimental) Blind claim. Each registered bidder can perform a blind claim."
     )
     .addParam("bidder", "Bidder address")
     .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint)
@@ -531,12 +534,16 @@ declareAuctionTask(
       );
     }
 
-    if (!(await auction.base.connect(resolvedBidder.signer).canBlindClaim())) {
+    if (
+      !(await auction.auction.connect(resolvedBidder.signer).canBlindClaim())
+    ) {
       throw new FHEAuctionError("Auction is not ready for blind claim");
     }
 
     if (!taskArguments.forceClaimAgain) {
-      if (await auction.base.connect(resolvedBidder.signer).hasBlindClaimed()) {
+      if (
+        await auction.auction.connect(resolvedBidder.signer).hasBlindClaimed()
+      ) {
         console.info(
           `✅ Bidder ${resolvedBidder.address} has already sent a blind claim.`
         );
@@ -545,7 +552,7 @@ declareAuctionTask(
     }
 
     if (
-      await auction.base.connect(resolvedBidder.signer).blindClaimCompleted()
+      await auction.auction.connect(resolvedBidder.signer).blindClaimCompleted()
     ) {
       console.info(
         `✅ Bidder ${resolvedBidder.address} has successfully completed their assigned blind claim.`
@@ -553,12 +560,115 @@ declareAuctionTask(
       return;
     }
 
-    const tx = await auction.base
+    const tx = await auction.auction
       .connect(resolvedBidder.signer)
       .blindClaim({ gasLimit: taskArguments.gasLimit });
     const receipt = await tx.wait(1);
 
     logGas(hre, receipt, `Blind claim`);
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+// Award
+////////////////////////////////////////////////////////////////////////////////
+
+declareAuctionTask(
+  auctionScope
+    .task(SCOPE_AUCTION_TASK_AWARD, "Award prize at specified rank.")
+    .addParam("worker", "Worker address or signer index")
+    .addParam(
+      "rank",
+      "Rank if the winning list of bidders, 0=first, bid count-1=last",
+      undefined,
+      types.bigint
+    )
+    .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint),
+  async function (
+    auction: FHEAuctionResolution,
+    taskArguments: TaskArguments,
+    hre: HardhatRuntimeEnvironment
+  ) {
+    const worker = await resolveSignerOrThrow(
+      hre,
+      taskArguments.worker,
+      "Invalid --worker argument."
+    );
+
+    const rank = taskArguments.rank;
+    if (rank === undefined) {
+      throw new FHEAuctionError("Missing --rank argument.");
+    }
+
+    const canAward = await auction.base
+      .connect(worker)
+      .canAwardPrizeAtRank(rank);
+    if (!canAward) {
+      throw new FHEAuctionError("Auction is not ready to award prizes.");
+    }
+
+    const bidCount = await auction.base.connect(worker).bidCount();
+    if (bidCount === 0n) {
+      throw new FHEAuctionError("Auction has no bidder.");
+    }
+
+    if (rank < 0 || rank >= bidCount) {
+      throw new FHEAuctionError(
+        `Invalid rank value '${rank}', expecting a value between 0 and ${
+          bidCount - 1n
+        }`
+      );
+    }
+
+    const tx = await auction.auction
+      .connect(worker)
+      .awardPrizeAtRank(rank, { gasLimit: taskArguments.gasLimit });
+    const receipt = await tx.wait(1);
+
+    logGas(hre, receipt, `Award rank ${rank}`);
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+// Claim
+////////////////////////////////////////////////////////////////////////////////
+
+declareAuctionTask(
+  auctionScope
+    .task(SCOPE_AUCTION_TASK_CLAIM, "Claim bidder's prize.")
+    .addParam("bidder", "Bidder address or signer index")
+    .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint),
+  async function (
+    auction: FHEAuctionResolution,
+    taskArguments: TaskArguments,
+    hre: HardhatRuntimeEnvironment
+  ) {
+    const resolvedBidder = await resolveBidderOrThrow(
+      hre,
+      auction.base,
+      taskArguments.bidder
+    );
+
+    if (!resolvedBidder.registered) {
+      throw new FHEAuctionError(
+        `Bidder ${resolvedBidder.address} is not a registered bidder`,
+        "Invalid --bidder argument."
+      );
+    }
+
+    const canClaim = await auction.base
+      .connect(resolvedBidder.signer)
+      .canClaim();
+    if (!canClaim) {
+      throw new FHEAuctionError("Auction is not ready for prize claim.");
+    }
+
+    const tx = await auction.auction
+      .connect(resolvedBidder.signer)
+      .claim({ gasLimit: taskArguments.gasLimit });
+    const receipt = await tx.wait(1);
+
+    logGas(hre, receipt, `🍰 Claim bidder=${resolvedBidder.address}`);
   }
 );
 
@@ -569,13 +679,19 @@ declareAuctionTask(
 declareAuctionTask(
   auctionScope
     .task(SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE, "Decrypt uniform price")
+    .addOptionalParam("worker", "Worker address", undefined, types.string)
     .addOptionalParam("gasLimit", "Gas limit", undefined, types.bigint),
   async function (
     auction: FHEAuctionResolution,
     taskArguments: TaskArguments,
     hre: HardhatRuntimeEnvironment
   ) {
-    const resolvedSigners = await resolveAuctionSigners(hre, auction.base);
+    const workerArg = taskArguments.worker ?? (await auction.base.owner());
+    const worker = await resolveSignerOrThrow(
+      hre,
+      workerArg,
+      "Invalid --worker argument."
+    );
 
     const clearUniformPrice = await auction.base.clearUniformPrice();
     if (clearUniformPrice > 0) {
@@ -591,18 +707,14 @@ declareAuctionTask(
       return;
     }
 
-    if (
-      !(await auction.base
-        .connect(resolvedSigners.owner)
-        .canDecryptUniformPrice())
-    ) {
+    if (!(await auction.base.connect(worker).canDecryptUniformPrice())) {
       throw new FHEAuctionError(
         "Auction's uniform price is not ready for decryption"
       );
     }
 
     const tx = await auction.base
-      .connect(resolvedSigners.owner)
+      .connect(worker)
       .decryptUniformPrice({ gasLimit: taskArguments.gasLimit });
     const receipt = await tx.wait(1);
 
@@ -611,7 +723,7 @@ declareAuctionTask(
 );
 
 ////////////////////////////////////////////////////////////////////////////////
-// Count
+// Claim Info
 ////////////////////////////////////////////////////////////////////////////////
 
 declareAuctionTask(
@@ -627,17 +739,17 @@ declareAuctionTask(
     const bidCount = await auction.base.bidCount();
     const totalClaimsCompleted = await auction.base.totalClaimsCompleted();
     const totalBlindClaimsRequested =
-      await auction.base.totalBlindClaimsRequested();
+      await auction.auction.totalBlindClaimsRequested();
     const clearUniformPrice = await auction.base.clearUniformPrice();
 
-    const minIterForBlindClaim =
-      await auction.base.minIterationsForBlindClaim();
-    const minIterForClaim = await auction.base.minIterationsForClaim();
-    const computedIter = await auction.base.computedIterations();
+    const minIterationsForPrizeAward =
+      await auction.base.minIterationsForPrizeAward();
+    const minIterationsForClaim = await auction.base.minIterationsForClaim();
+    const computedIterations = await auction.base.computedIterations();
 
     console.info(`Clear uniform prize          : ${clearUniformPrice}`);
     console.info(
-      `Computed iterations          : ${computedIter} (blind claim: ${minIterForBlindClaim}, direct claim: ${minIterForClaim})`
+      `Computed iterations          : ${computedIterations} (award : ${minIterationsForPrizeAward}, claim: ${minIterationsForClaim})`
     );
     console.info(
       `Total claims completed       : ${totalClaimsCompleted} / ${bidCount}`
@@ -645,5 +757,15 @@ declareAuctionTask(
     console.info(
       `Total blind claims requested : ${totalBlindClaimsRequested} / ${bidCount}`
     );
+
+    return {
+      clearUniformPrice,
+      computedIterations,
+      minIterationsForPrizeAward,
+      minIterationsForClaim,
+      bidCount,
+      totalClaimsCompleted,
+      totalBlindClaimsRequested,
+    };
   }
 );

@@ -32,14 +32,27 @@ async function impersonateAddress(
 }
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  if (hre.network.name !== "locahost" && hre.network.name !== "hardhat") {
+  if (hre.network.name === "sepolia") {
     return;
   }
+
+  const aclCode = await hre.ethers.provider.getCode(ACL_ADDRESS);
 
   const aclArtifact = await import(
     "fhevm-core-contracts/artifacts/contracts/ACL.sol/ACL.json"
   );
   const aclBytecode = aclArtifact.deployedBytecode;
+
+  if (aclCode !== "0x") {
+    if (aclArtifact.deployedBytecode !== aclCode) {
+      console.error(`ACL bytecode differs`);
+      throw new Error("ACL bytecode differs");
+    } else {
+      console.log(`ACL already deployed at ${ACL_ADDRESS}`);
+    }
+    return;
+  }
+
   await hre.network.provider.send("hardhat_setCode", [
     ACL_ADDRESS,
     aclBytecode,

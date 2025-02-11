@@ -1,7 +1,6 @@
 import { toBigIntBE, toBufferBE } from "bigint-buffer";
 import crypto from "crypto";
 import { Wallet, ethers } from "ethers";
-import hre from "hardhat";
 import { Keccak } from "sha3";
 import { isAddress } from "web3-validator";
 
@@ -11,9 +10,10 @@ import {
   KMSVERIFIER_ADDRESS,
   PRIVATE_KEY_COPROCESSOR_ACCOUNT,
   PRIVATE_KEY_KMS_SIGNER,
-} from "./constants";
+} from "../test/constants";
 import { insertSQL } from "./coprocessorUtils";
 import { awaitCoprocessor, getClearText } from "./coprocessorUtils";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 enum Types {
   ebool = 0,
@@ -48,8 +48,9 @@ function createUintToUint8ArrayFunction(numBits: number) {
 
     // concatenate 32 random bytes at the end of buffer to simulate encryption noise
     const randomBytes = crypto.randomBytes(32);
+
     // const randomBytes = Buffer.from(
-    //   hre.ethers.toBeArray(
+    //   ethers.toBeArray(
     //     "0x7c4c0a51d1b434b528ced18909a8e4913ed4345187a275c33fcc6d2ca6f8c70e"
     //   )
     // );
@@ -117,6 +118,7 @@ function createUintToUint8ArrayFunction(numBits: number) {
 }
 
 export const reencryptRequestMocked = async (
+  hre: HardhatRuntimeEnvironment,
   handle: bigint,
   privateKey: string,
   publicKey: string,
@@ -124,11 +126,12 @@ export const reencryptRequestMocked = async (
   contractAddress: string,
   userAddress: string
 ) => {
+  const chainId = await hre.getChainId();
   // Signature checking:
   const domain = {
     name: "Authorization token",
     version: "1",
-    chainId: hre.network.config.chainId,
+    chainId: chainId, //hre.network.config.chainId,
     verifyingContract: contractAddress,
   };
   const types = {
@@ -165,11 +168,12 @@ export const reencryptRequestMocked = async (
       "userAddress should not be equal to contractAddress when requesting reencryption!"
     );
   }
-  await awaitCoprocessor();
+  await awaitCoprocessor(hre);
   return BigInt(await getClearText(handle));
 };
 
 export const createEncryptedInputMocked = (
+  hre: HardhatRuntimeEnvironment,
   contractAddress: string,
   userAddress: string
 ) => {
@@ -428,6 +432,7 @@ export const createEncryptedInputMocked = (
       listHandlesStr.map((handle) => (inputProof += handle));
       const listHandles = listHandlesStr.map((i) => BigInt("0x" + i));
       const sigCoproc = await computeInputSignatureCopro(
+        hre,
         "0x" + hash.toString("hex"),
         listHandles,
         userAddress,
@@ -436,6 +441,7 @@ export const createEncryptedInputMocked = (
       inputProof += sigCoproc.slice(2);
 
       const signaturesKMS = await computeInputSignaturesKMS(
+        hre,
         "0x" + hash.toString("hex"),
         userAddress,
         contractAddress
@@ -511,14 +517,16 @@ export const ENCRYPTION_TYPES = {
 };
 
 async function computeInputSignatureCopro(
+  hre: HardhatRuntimeEnvironment,
   hash: string,
   handlesList: bigint[],
   userAddress: string,
   contractAddress: string
 ): Promise<string> {
   const privKeySigner = PRIVATE_KEY_COPROCESSOR_ACCOUNT;
-  const coprocSigner = new Wallet(privKeySigner).connect(ethers.provider);
+  const coprocSigner = new Wallet(privKeySigner).connect(hre.ethers.provider);
   const signature = await coprocSign(
+    hre,
     hash,
     handlesList,
     userAddress,
@@ -529,6 +537,7 @@ async function computeInputSignatureCopro(
 }
 
 async function computeInputSignaturesKMS(
+  hre: HardhatRuntimeEnvironment,
   hash: string,
   userAddress: string,
   contractAddress: string
@@ -537,8 +546,11 @@ async function computeInputSignaturesKMS(
   const numSigners = 1; // @note: only 1 KMS signer in mocked mode for now
   for (let idx = 0; idx < numSigners; idx++) {
     const privKeySigner = PRIVATE_KEY_KMS_SIGNER;
-    const kmsSigner = new ethers.Wallet(privKeySigner).connect(ethers.provider);
+    const kmsSigner = new ethers.Wallet(privKeySigner).connect(
+      hre.ethers.provider
+    );
     const signature = await kmsSign(
+      hre,
       hash,
       userAddress,
       contractAddress,
@@ -550,6 +562,7 @@ async function computeInputSignaturesKMS(
 }
 
 async function coprocSign(
+  hre: HardhatRuntimeEnvironment,
   hashOfCiphertext: string,
   handlesList: bigint[],
   userAddress: string,
@@ -557,9 +570,11 @@ async function coprocSign(
   signer: Wallet
 ): Promise<string> {
   const inputAdd = INPUTVERIFIER_ADDRESS;
-  const chainId = hre.__SOLIDITY_COVERAGE_RUNNING
-    ? 31337
-    : network.config.chainId;
+  //@ts-ignore
+  // const chainId = hre.__SOLIDITY_COVERAGE_RUNNING
+  //   ? 31337
+  //   : hre.network.config.chainId;
+  const chainId = await hre.getChainId();
   const aclAdd = ACL_ADDRESS;
   const domain = {
     name: "InputVerifier",
@@ -611,15 +626,18 @@ async function coprocSign(
 }
 
 async function kmsSign(
+  hre: HardhatRuntimeEnvironment,
   hashOfCiphertext: string,
   userAddress: string,
   contractAddress: string,
   signer: Wallet
 ): Promise<string> {
   const kmsVerifierAdd = KMSVERIFIER_ADDRESS;
-  const chainId = hre.__SOLIDITY_COVERAGE_RUNNING
-    ? 31337
-    : network.config.chainId;
+  //@ts-ignore
+  // const chainId = hre.__SOLIDITY_COVERAGE_RUNNING
+  //   ? 31337
+  //   : hre.network.config.chainId;
+  const chainId = await hre.getChainId();
   const aclAdd = ACL_ADDRESS;
 
   const domain = {

@@ -5,7 +5,7 @@ import {euint16, euint256} from "fhevm/lib/TFHE.sol";
 
 interface IFHEAuctionEngine {
     function canClaim() external view returns (bool);
-    function canBlindClaim() external view returns (bool);
+    function canAward() external view returns (bool);
     function initialize(uint256 totalQuantity, uint16 maxBidCount) external;
     function close() external;
     function bidderId(address bidder) external view returns (uint16);

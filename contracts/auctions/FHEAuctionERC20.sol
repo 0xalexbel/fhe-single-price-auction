@@ -5,8 +5,9 @@ import {einput} from "fhevm/lib/TFHE.sol";
 import {FHEAuction} from "./FHEAuction.sol";
 import {FHEAuctionBase} from "./FHEAuctionBase.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {FHEAuctionBlindClaimable} from "./extensions/FHEAuctionBlindClaimable.sol";
 
-contract FHEAuctionERC20 is FHEAuction {
+contract FHEAuctionERC20 is FHEAuction, FHEAuctionBlindClaimable {
     IERC20 private immutable _paymentToken;
 
     /**
@@ -23,7 +24,7 @@ contract FHEAuctionERC20 is FHEAuction {
     /**
      * @notice See {FHEAuctionBase-isNative}.
      */
-    function isNative() public override pure returns (bool) {
+    function isNative() public pure override returns (bool) {
         return false;
     }
 

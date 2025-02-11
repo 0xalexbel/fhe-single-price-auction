@@ -27,35 +27,18 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     }
 
     /**
-     * @dev See {FHEAuctionBase-_canClaim}.
+     * @dev See {FHEAuctionBase-_canAward}.
      * @dev Additionnal conditions:
      * - The final uniform price must have been decrypted.
      */
-    function _canClaim(address bidder) internal view virtual override(FHEAuctionBase) returns (bool) {
-        if (clearUniformPrice() == 0) {
-            // the auction uniform price is not yet decrypted
-            return false;
-        }
-        return super._canClaim(bidder);
+    function _canAward() internal view virtual override returns (bool) {
+        return (clearUniformPrice() > 0);
     }
 
     /**
-     * @dev See {FHEAuctionBase-_canBlindClaimRank}.
-     * @dev Additionnal conditions:
-     * - The final uniform price must have been decrypted.
+     * @dev See {FHEAuctionBase-_awardWinningBidForBidder}.
      */
-    function _canBlindClaimRank(uint16 rank) internal view virtual override(FHEAuctionBase) returns (bool) {
-        if (clearUniformPrice() == 0) {
-            // the auction uniform price is not yet decrypted
-            return false;
-        }
-        return super._canBlindClaimRank(rank);
-    }
-
-    /**
-     * @dev See {FHEAuctionBase-_claim}.
-     */
-    function _claim(address bidder, uint16, /*id*/ euint256 validatedPrice, euint256 wonQuantity)
+    function _awardWinningBidForBidder(address bidder, uint16, /*id*/ euint256 validatedPrice, euint256 wonQuantity)
         internal
         virtual
         override
@@ -81,9 +64,9 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     }
 
     /**
-     * @dev See {FHEAuctionBase-_claimRank}.
+     * @dev See {FHEAuctionBase-_awardWinningBidAtRank}.
      */
-    function _claimRank(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity)
+    function _awardWinningBidAtRank(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity)
         internal
         virtual
         override
@@ -110,7 +93,7 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
         uint256 clearWonQuantity
     ) external onlyGateway {
         // reverts if already completed
-        _markBlindClaimRankCompleted(_requestIDToRank[requestID]);
+        _markPrizeAtRankAwarded(_requestIDToRank[requestID]);
 
         _callbackDecrypt(_getBidderById(clearId), clearValidatedPrice, clearWonQuantity);
     }
@@ -181,26 +164,17 @@ abstract contract FHEAuction is FHEAuctionBase, IFHEAuction {
     }
 
     /**
-     * @notice Overrides the `FHEAuctionBase._bid` function to enforce a minimum deposit requirement before placing a bid.
-     * The function reverts if the caller's deposit balance is insufficient to meet the auction's minimum required amount.
-     *
-     * @dev See {FHEAuctionBase-_bid}
-     */
-    function _bid(address bidder, einput inPrice, einput inQuantity, bytes calldata inputProof)
-        internal
-        virtual
-        override
-    {
-        _requireSufficientBalance(_balances[bidder]);
-        super._bid(bidder, inPrice, inQuantity, inputProof);
-    }
-
-    /**
      * @dev See {FHEAuctionBase-_cancelBid}.
      */
     function _cancelBid(address bidder) internal virtual override {
         _withdrawPayment(bidder, _balances[bidder]);
-        super._cancelBid(bidder);
+    }
+
+    /**
+     * @dev See {FHEAuctionBase-_checkBidderPaymentDeposit}.
+     */
+    function _checkBidderPaymentDeposit(address bidder) internal view virtual override {
+        _requireSufficientPaymentDeposit(_balances[bidder]);
     }
 
     /**

@@ -1,11 +1,14 @@
 import { toBufferBE } from "bigint-buffer";
-import { ethers, network } from "hardhat";
 
 import { awaitCoprocessor, getClearText } from "./coprocessorUtils";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-export const mineNBlocks = async (n: number) => {
+export const mineNBlocks = async (
+  hre: HardhatRuntimeEnvironment,
+  n: number
+) => {
   for (let index = 0; index < n; index++) {
-    await ethers.provider.send("evm_mine");
+    await hre.ethers.provider.send("evm_mine");
   }
 };
 
@@ -21,19 +24,25 @@ export const bigIntToBytes256 = (value: bigint) => {
   return new Uint8Array(toBufferBE(value, 256));
 };
 
-export const waitNBlocks = async (Nblocks: number) => {
-  const currentBlock = await ethers.provider.getBlockNumber();
-  if (network.name === "hardhat") {
-    await produceDummyTransactions(Nblocks);
+export const waitNBlocks = async (
+  hre: HardhatRuntimeEnvironment,
+  Nblocks: number
+) => {
+  const currentBlock = await hre.ethers.provider.getBlockNumber();
+  if (hre.network.name === "hardhat") {
+    await produceDummyTransactions(hre, Nblocks);
   }
-  await waitForBlock(currentBlock + Nblocks);
+  await waitForBlock(hre, currentBlock + Nblocks);
 };
 
-export const produceDummyTransactions = async (blockCount: number) => {
+export const produceDummyTransactions = async (
+  hre: HardhatRuntimeEnvironment,
+  blockCount: number
+) => {
   let counter = blockCount;
   while (counter >= 0) {
     counter--;
-    const [signer] = await ethers.getSigners();
+    const [signer] = await hre.ethers.getSigners();
     const nullAddress = "0x0000000000000000000000000000000000000000";
     const tx = {
       to: nullAddress,
@@ -44,15 +53,19 @@ export const produceDummyTransactions = async (blockCount: number) => {
   }
 };
 
-const waitForBlock = (blockNumber: bigint | number) => {
+const waitForBlock = (
+  hre: HardhatRuntimeEnvironment,
+  blockNumber: bigint | number
+) => {
   return new Promise((resolve, reject) => {
     const waitBlock = async (currentBlock: number) => {
+      console.log("WAIT");
       if (blockNumber <= BigInt(currentBlock)) {
-        await ethers.provider.off("block", waitBlock);
+        await hre.ethers.provider.off("block", waitBlock);
         resolve(blockNumber);
       }
     };
-    ethers.provider.on("block", waitBlock).catch((err) => {
+    hre.ethers.provider.on("block", waitBlock).catch((err) => {
       reject(err);
     });
   });
@@ -94,13 +107,18 @@ export const debug = {
    * @param {bigint} a handle to decrypt
    * @returns {bool}
    */
-  decryptBool: async (handle: bigint): Promise<boolean> => {
+  decryptBool: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<boolean> => {
     verifyType(handle, EBOOL_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return (await getClearText(handle)) === "1";
     } else {
-      throw Error("The debug.decryptBool function can only be called in mocked mode");
+      throw Error(
+        "The debug.decryptBool function can only be called in mocked mode"
+      );
     }
   },
 
@@ -113,13 +131,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt4: async (handle: bigint): Promise<bigint> => {
+  decrypt4: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT4_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt4 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt4 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -132,13 +155,18 @@ export const debug = {
    * @param {bigint} a handle to decrypt
    * @returns {bigint}
    */
-  decrypt8: async (handle: bigint): Promise<bigint> => {
+  decrypt8: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT8_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt8 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt8 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -151,13 +179,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt16: async (handle: bigint): Promise<bigint> => {
+  decrypt16: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT16_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt16 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt16 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -170,13 +203,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt32: async (handle: bigint): Promise<bigint> => {
+  decrypt32: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT32_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt32 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt32 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -189,13 +227,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt64: async (handle: bigint): Promise<bigint> => {
+  decrypt64: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT64_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt64 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt64 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -208,13 +251,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt128: async (handle: bigint): Promise<bigint> => {
+  decrypt128: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT128_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt128 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt128 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -227,13 +275,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decrypt256: async (handle: bigint): Promise<bigint> => {
+  decrypt256: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<bigint> => {
     verifyType(handle, EUINT256_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       return BigInt(await getClearText(handle));
     } else {
-      throw Error("The debug.decrypt256 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decrypt256 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -246,15 +299,20 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {string}
    */
-  decryptAddress: async (handle: bigint): Promise<string> => {
+  decryptAddress: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<string> => {
     verifyType(handle, EUINT160_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
       const bigintAdd = BigInt(await getClearText(handle));
       const handleStr = "0x" + bigintAdd.toString(16).padStart(40, "0");
       return handleStr;
     } else {
-      throw Error("The debug.decryptAddress function can only be called in mocked mode");
+      throw Error(
+        "The debug.decryptAddress function can only be called in mocked mode"
+      );
     }
   },
 
@@ -267,13 +325,18 @@ export const debug = {
    * @param {bigint} a handle to decrypt
    * @returns {bigint}
    */
-  decryptEbytes64: async (handle: bigint): Promise<string> => {
+  decryptEbytes64: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<string> => {
     verifyType(handle, EBYTES64_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
-      return ethers.toBeHex(await getClearText(handle), 64);
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
+      return hre.ethers.toBeHex(await getClearText(handle), 64);
     } else {
-      throw Error("The debug.decryptEbytes64 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decryptEbytes64 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -286,13 +349,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decryptEbytes128: async (handle: bigint): Promise<string> => {
+  decryptEbytes128: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<string> => {
     verifyType(handle, EBYTES128_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
-      return ethers.toBeHex(await getClearText(handle), 128);
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
+      return hre.ethers.toBeHex(await getClearText(handle), 128);
     } else {
-      throw Error("The debug.decryptEbytes128 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decryptEbytes128 function can only be called in mocked mode"
+      );
     }
   },
 
@@ -305,13 +373,18 @@ export const debug = {
    * @param {bigint} handle to decrypt
    * @returns {bigint}
    */
-  decryptEbytes256: async (handle: bigint): Promise<string> => {
+  decryptEbytes256: async (
+    hre: HardhatRuntimeEnvironment,
+    handle: bigint
+  ): Promise<string> => {
     verifyType(handle, EBYTES256_T);
-    if (network.name === "hardhat") {
-      await awaitCoprocessor();
-      return ethers.toBeHex(await getClearText(handle), 256);
+    if (hre.network.name === "hardhat") {
+      await awaitCoprocessor(hre);
+      return hre.ethers.toBeHex(await getClearText(handle), 256);
     } else {
-      throw Error("The debug.decryptEbytes256 function can only be called in mocked mode");
+      throw Error(
+        "The debug.decryptEbytes256 function can only be called in mocked mode"
+      );
     }
   },
 };

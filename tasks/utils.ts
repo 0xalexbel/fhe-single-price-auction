@@ -10,11 +10,12 @@ import {
   ACL_ADDRESS,
   GATEWAY_URL,
   KMSVERIFIER_ADDRESS,
+  TFHEEXECUTOR_ADDRESS,
 } from "../test/constants";
 import {
   createEncryptedInputMocked,
   reencryptRequestMocked,
-} from "./fhevmjsMocked";
+} from "../test/fhevmjsMocked";
 import {
   FHEAuctionBase,
   FHEAuctionERC20,
@@ -26,7 +27,6 @@ import {
 } from "../types";
 import { FHEAuctionError } from "./error";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
-import assert from "assert";
 
 export interface FHEAuctionResolution {
   address: string;
@@ -79,7 +79,6 @@ export async function convertToAddressOrThrow(
 
 export async function resolveSignerOrThrow(
   hre: HardhatRuntimeEnvironment,
-  auction: FHEAuctionBase,
   addrOrIndex: any,
   messagePrefix?: string
 ) {
@@ -803,4 +802,88 @@ export function parseComputeEvents(
     startProgress: startIterProgress,
     endProgress: endIterProgress,
   };
+}
+
+export async function parseAllEvents(hre: HardhatRuntimeEnvironment) {
+  const abi = [
+    "event FheAdd(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheSub(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheMul(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheDiv(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheRem(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheBitAnd(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheBitOr(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheBitXor(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheShl(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheShr(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheRotl(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheRotr(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheEq(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheEqBytes(uint256 lhs, bytes rhs, bytes1 scalarByte, uint256 result)",
+    "event FheNe(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheNeBytes(uint256 lhs, bytes rhs, bytes1 scalarByte, uint256 result)",
+    "event FheGe(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheGt(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheLe(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheLt(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheMin(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheMax(uint256 lhs, uint256 rhs, bytes1 scalarByte, uint256 result)",
+    "event FheNeg(uint256 ct, uint256 result)",
+    "event FheNot(uint256 ct, uint256 result)",
+    "event VerifyCiphertext(bytes32 inputHandle,address userAddress,bytes inputProof,bytes1 inputType,uint256 result)",
+    "event Cast(uint256 ct, bytes1 toType, uint256 result)",
+    "event TrivialEncrypt(uint256 pt, bytes1 toType, uint256 result)",
+    "event TrivialEncryptBytes(bytes pt, bytes1 toType, uint256 result)",
+    "event FheIfThenElse(uint256 control, uint256 ifTrue, uint256 ifFalse, uint256 result)",
+    "event FheRand(bytes1 randType, uint256 result)",
+    "event FheRandBounded(uint256 upperBound, bytes1 randType, uint256 result)",
+  ];
+
+  const contract = new hre.ethers.Contract(
+    TFHEEXECUTOR_ADDRESS,
+    abi,
+    hre.ethers.provider
+  );
+
+  console.log("TFHEEXECUTOR_ADDRESS=" + TFHEEXECUTOR_ADDRESS);
+  // Fetch all events emitted by the contract
+  const filter = {
+    //address: TFHEEXECUTOR_ADDRESS,
+    fromBlock: 0,
+    toBlock: "latest",
+  };
+
+  const logs = await hre.ethers.provider.getLogs(filter);
+
+  const events = logs
+    .map((log) => {
+      try {
+        const parsedLog = contract.interface.parseLog(log);
+        return {
+          eventName: parsedLog!.name,
+          args: parsedLog!.args,
+        };
+      } catch {
+        // If the log cannot be parsed, skip it
+        console.log("NULL");
+        return null;
+      }
+    })
+    .filter((event) => event !== null);
+
+  for (let i = 0; i < events.length; ++i) {
+    if (events[i].eventName === "FheIfThenElse") {
+      console.log(
+        `${i + 1}/${events.length} EVENT ${events[i].eventName} args[3]:${
+          events[i].args[3]
+        }`
+      );
+    } else {
+      console.log(
+        `${i + 1}/${events.length} EVENT ${events[i].eventName} args[0]:${
+          events[i].args[0]
+        }`
+      );
+    }
+  }
 }

@@ -10,8 +10,10 @@ import {
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { convertToAddress, logGas } from "./utils";
 import { ethers } from "ethers";
+import { SCOPE_AUCTION, SCOPE_AUCTION_TASK_CREATE } from "./task-names";
+import { FHEAuctionError } from "./error";
 
-const auctionScope = scope("auction", "Auction related commands");
+const auctionScope = scope(SCOPE_AUCTION, "Auction related commands");
 
 /**
  * Example:
@@ -25,7 +27,7 @@ const auctionScope = scope("auction", "Auction related commands");
  *      --network localhost
  */
 auctionScope
-  .task("create", "Creates a new ERC20 auction")
+  .task(SCOPE_AUCTION_TASK_CREATE, "Creates a new ERC20 auction")
   .addParam("type", "Auction type 'erc20' or 'native'", undefined, types.string)
   .addOptionalParam("owner", "Auction owner (default: beneficiary)")
   .addOptionalParam("deployer", "Deployer address (default: owner)")
@@ -52,7 +54,7 @@ auctionScope
     types.bigint
   )
   .addParam("paymentPenalty", "Payment token penalty", undefined, types.bigint)
-  .addParam("maxBidCount", "Maximum number of bids")
+  .addParam("maxBidCount", "Maximum number of bids", undefined, types.bigint)
   .addFlag("dryRun")
   .setAction(async function (
     taskArguments: TaskArguments,
@@ -127,7 +129,7 @@ auctionScope
     );
 
     let salt: string;
-    if (!taskArguments.salt === undefined) {
+    if (taskArguments.salt === undefined) {
       salt = hre.ethers.toBeHex(
         hre.ethers.toBigInt(hre.ethers.randomBytes(32))
       );
@@ -173,6 +175,8 @@ auctionScope
     console.info(`Auction payment penalty         : ${paymentPenalty}`);
     console.info(`Auction tie breaking rule       : ${tieBreakingRule}`);
 
+    let auctionAddr: string | undefined;
+
     if (theType === "erc20") {
       const factoryAddr = (await deployments.get("FHEAuctionERC20Factory"))
         .address;
@@ -182,16 +186,20 @@ auctionScope
       );
 
       // Check if already exists
-      let auctionAddr = await factory.getAuction(
+      auctionAddr = await factory.getAuction(
         salt,
         beneficiary,
         auctionTokenAddr,
         paymentTokenAddr
       );
 
+      if (auctionAddr === undefined) {
+        throw new FHEAuctionError("Factory.getAuction failed");
+      }
+
       if (taskArguments.dryRun) {
         console.info(`Auction existing address        : ${auctionAddr}`);
-        return;
+        return auctionAddr;
       }
 
       if (auctionAddr === hre.ethers.ZeroAddress) {
@@ -248,7 +256,7 @@ auctionScope
       );
 
       // Check if already exists
-      let auctionAddr = await factory.getAuction(
+      auctionAddr = await factory.getAuction(
         salt,
         beneficiary,
         auctionTokenAddr
@@ -256,7 +264,7 @@ auctionScope
 
       if (taskArguments.dryRun) {
         console.info(`Auction existing address        : ${auctionAddr}`);
-        return;
+        return auctionAddr;
       }
 
       if (auctionAddr === hre.ethers.ZeroAddress) {
@@ -298,4 +306,6 @@ auctionScope
         );
       }
     }
+
+    return auctionAddr;
   });

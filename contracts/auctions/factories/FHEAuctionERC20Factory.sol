@@ -9,16 +9,25 @@ import {FHEAuctionERC20} from "../FHEAuctionERC20.sol";
 import {FHEAuctionBase} from "../FHEAuctionBase.sol";
 
 contract FHEAuctionERC20Factory is FHEAuctionFactory {
-    event FHEAuctionERC20Deployed(address indexed auction_, bytes32 indexed salt_, address beneficiary_, address auctionToken_, address paymentToken_);
+    event FHEAuctionERC20Deployed(
+        address indexed auction_,
+        bytes32 indexed salt_,
+        address beneficiary_,
+        address auctionToken_,
+        address paymentToken_
+    );
 
-    constructor(FHEAuctionFactoryDetails memory details_) FHEAuctionFactory(details_) {
-    }
+    constructor(FHEAuctionFactoryDetails memory details_) FHEAuctionFactory(details_) {}
 
     function isNative() public view virtual override returns (bool) {
         return false;
     }
 
-    function getAuction(bytes32 salt_, address beneficiary_, address auctionToken_, address paymentToken_) external view returns (address) {
+    function getAuction(bytes32 salt_, address beneficiary_, address auctionToken_, address paymentToken_)
+        external
+        view
+        returns (address)
+    {
         return _getAuction(_hashSalt(salt_, beneficiary_, auctionToken_, paymentToken_));
     }
 
@@ -26,7 +35,11 @@ contract FHEAuctionERC20Factory is FHEAuctionFactory {
         return type(FHEAuctionERC20).creationCode;
     }
 
-    function _hashSalt(bytes32 salt_, address beneficiary_, address auctionToken_, address paymentToken_) internal pure returns (bytes32) {
+    function _hashSalt(bytes32 salt_, address beneficiary_, address auctionToken_, address paymentToken_)
+        internal
+        pure
+        returns (bytes32)
+    {
         return keccak256(abi.encode(salt_, beneficiary_, auctionToken_, paymentToken_));
     }
 

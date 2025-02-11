@@ -17,6 +17,7 @@ abstract contract FHEAuctionFactory is Ownable2Step {
 
     mapping(uint8 => FHEAuctionEngineFactory) private _engineFactories;
     mapping(bytes32 => address) private _auctionDeployed;
+    uint256 private _auctionDeployedCount;
 
     constructor(FHEAuctionFactoryDetails memory details_) Ownable(msg.sender) {
         if (address(details_.enginePriceIdFactory) != address(0)) {
@@ -49,17 +50,22 @@ abstract contract FHEAuctionFactory is Ownable2Step {
         }
     }
 
-    function _getEngineFactory(uint8 tieBreakingRule) internal view returns(FHEAuctionEngineFactory) {
+    function _getEngineFactory(uint8 tieBreakingRule) internal view returns (FHEAuctionEngineFactory) {
         return _engineFactories[tieBreakingRule];
     }
 
-    function _getAuction(bytes32 deploySalt) internal view returns(address) {
+    function _getAuction(bytes32 deploySalt) internal view returns (address) {
         return _auctionDeployed[deploySalt];
     }
 
     function _setAuction(bytes32 deploySalt, address auctionAddr) internal {
         require(_auctionDeployed[deploySalt] == address(0), "Auction already deployed");
         _auctionDeployed[deploySalt] = auctionAddr;
+        _auctionDeployedCount += 1;
+    }
+
+    function count() external view returns (uint256) {
+        return _auctionDeployedCount;
     }
 
     function isNative() public view virtual returns (bool);

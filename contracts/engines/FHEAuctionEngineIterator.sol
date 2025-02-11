@@ -19,7 +19,7 @@ contract FHEAuctionEngineIterator is FourStepsIterator {
         uint32 step2UnitFheGasCost,
         uint32 step3UnitFheGasCost,
         uint32 step4UnitFheGasCost,
-        bool onlyBlindClaim
+        bool onlyAward
     ) external onlyOwner {
         FourStepsIterator.Step[] memory fourSteps = new FourStepsIterator.Step[](4);
 
@@ -35,7 +35,7 @@ contract FHEAuctionEngineIterator is FourStepsIterator {
         fourSteps[2].nativeGasWeight = 1;
         fourSteps[2].unitFheGasCost = step3UnitFheGasCost;
 
-        if (!onlyBlindClaim) {
+        if (!onlyAward) {
             fourSteps[3].size = bidCount * bidCount;
             fourSteps[3].nativeGasWeight = 1;
             fourSteps[3].unitFheGasCost = step4UnitFheGasCost;
@@ -45,9 +45,9 @@ contract FHEAuctionEngineIterator is FourStepsIterator {
     }
 
     /**
-     * @notice Returns the minimum number of computation iterations required to execute a blind claim.
+     * @notice Returns the minimum number of computation iterations required to award a prize to a winning bidder.
      */
-    function minIterationsForBlindClaim() external view returns (uint64) {
+    function minIterationsForPrizeAward() external view returns (uint64) {
         // steps #1 to #3 must be completed. See {FHEAuctionEngine} for more details.
         return _minIterProgressForStep(STEP_3_WON_QUANTITIES_BY_RANK);
     }

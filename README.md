@@ -10,6 +10,28 @@ pnpm install
 npx hardhat test
 ```
 
+> [!NOTE]  
+> fhevmjsMocked.ts, asyncDecrypt.ts and coprocessorUtils.ts where improved to add support to 'hardhat node' + task debug.
+
+```bash
+# Run a standalone node
+npx hardhad node
+# Test tasks only
+npx hardhat --network localhost test --grep "sepolia.tasks.priceid.erc20"
+```
+
+# Major Commands
+
+- `auction create` : creates a new auction
+- `auction start` : starts a existing auction, and make ready to accept bids
+- `auction bid` : place a new bid
+- `auction stop` : stops a existing auction, and make ready to compute
+- `auction compute` : execute chunck-by-chunck computing iterations
+- `auction decrypt-uniform-price` : decrypts the computed uniform price
+- `auction award` or `auction claim` : to distribute prizes
+
+Use `eth` and `erc20` sub commands to manage tokens
+
 # Algorithm
 
 For more information about the architecture and the algorithm, see [contracts/engines/FHEAuctionEngine.sol](https://github.com/0xalexbel/fhe-single-price-auction/blob/14c7121b1dee13cbef8224a096d9ded8a45aaaa2/contracts/engines/FHEAuctionEngine.sol) contract commentary.
@@ -18,7 +40,6 @@ For more information about the architecture and the algorithm, see [contracts/en
 
 - ProRata tie-breaking mode is not yet implemeneted.
 - Better incorporate the uniform price decryption pass into the computation flow.
-- Add direct claim command (as opposed to blind claim)
 
 # Tutorial
 
@@ -140,17 +161,17 @@ In this example, 12 iterations are required to fully compute the auction prizes 
 
 ```bash
 # Gas used: 447_959 (Tx: 0xee168db9edcb349c383d8cebd224c077f2dc4b1bc125ddf5fad11dab679a9e15)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --award
 # Gas used: 271_758 (Tx: 0xc3a439779bc36f87199d2323e3d1d4630060179aeef0cdfa07d7e7c166441f41)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --award
 # Gas used: 498_195 (Tx: 0xbb53638f49821792afbf37e03ba13c648cf1b16c33f99f1d61c4d2a3a237ef65)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --award
 # Gas used: 450_512 (Tx: 0x64bc1d14650c1ec10607c99dcf241c69778b533d3e7985d9b74d5b6df49f7336)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --award
 # Gas used: 508_647 (Tx: 0xdde23766d2e2c05bce43d019097fbdef555341ca3e5074418c5095679b0e2221) Progress=91%
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --award
 # Gas used: 433_290 (Tx: 0x5ddf738bcd05f3a7c6cbdc9fe5003016edffeb7fd5b7f508498a2c9b8ea65078) Progress=100%
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --blind-claim
+npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --award
 ```
 
 ### Step 8: Decrypt uniform prize
@@ -169,12 +190,12 @@ npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638b
 ### Step 9: Blind Claim prizes
 
 ```bash
-# Bob's blind claim
-npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 2
-# Carol's blind claim
-npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 3
-# David's blind claim
-npx hardhat --network sepolia auction blind-claim --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 4
+# Bob runs the 'award' transaction for rank 0
+npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 0 --worker 2
+# Carol runs the 'award' transaction for rank 1
+npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 1 --worker 3
+# David runs the 'award' transaction for rank 2
+npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 2 --worker 4
 ```
 
 To check blind claim progress:

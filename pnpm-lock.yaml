@@ -125,6 +125,9 @@ importers:
       hardhat-preprocessor:
         specifier: ^0.1.5
         version: 0.1.5(hardhat@2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2))
+      hardhat-tracer:
+        specifier: ^3.1.0
+        version: 3.1.0(chai@4.5.0)(hardhat@2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2))
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -1868,6 +1871,12 @@ packages:
     resolution: {integrity: sha512-j8m44mmPxpxAAd0G8fPHRHOas/INZdzptSur0TNJvMEGcFdLDhbHHxBcqZVQ/bmiW42q4gC60AP4CXn9EF018g==}
     peerDependencies:
       hardhat: ^2.0.5
+
+  hardhat-tracer@3.1.0:
+    resolution: {integrity: sha512-Ip16HQAuzbqbNJUIEVfqmbPmOY90bxZSpwu5Q73cwloy+LUYA04BATUM9Gui5H7zcgsgZ1IVy7pSYn6ZMjLmag==}
+    peerDependencies:
+      chai: 4.x
+      hardhat: '>=2.22.5 <3.x'
 
   hardhat@2.22.17:
     resolution: {integrity: sha512-tDlI475ccz4d/dajnADUTRc1OJ3H8fpP9sWhXhBPpYsQOg8JHq5xrDimo53UhWPl7KJmAeDCm1bFG74xvpGRpg==}
@@ -5655,6 +5664,19 @@ snapshots:
     dependencies:
       hardhat: 2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2)
       murmur-128: 0.2.1
+
+  hardhat-tracer@3.1.0(chai@4.5.0)(hardhat@2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2)):
+    dependencies:
+      chai: 4.5.0
+      chalk: 4.1.2
+      debug: 4.4.0(supports-color@8.1.1)
+      ethers: 5.7.2
+      hardhat: 2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2)
+      semver: 7.6.3
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
 
   hardhat@2.22.17(ts-node@10.9.2(@types/node@18.19.68)(typescript@5.7.2))(typescript@5.7.2):
     dependencies:

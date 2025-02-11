@@ -14,7 +14,6 @@ import {
   FHEAuctionEngineIterator,
 } from "../../types";
 import { awaitAllDecryptionResults } from "../asyncDecrypt";
-import { bigint } from "hardhat/internal/core/params/argumentTypes";
 import { ContractTransactionResponse } from "ethers";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -294,14 +293,14 @@ export abstract class FHEAuctionMockTestCtx {
 
     for (let i = 0; i < max; ++i) {
       await this.engine.computeValidation(1n, { gasLimit });
-      await awaitCoprocessor();
+      await awaitCoprocessor(hre);
       expect(await this.engine.validationProgress()).to.equal(i + 1);
     }
 
     expect(await this.engine.validationCompleted()).to.be.true;
 
     await this.engine.connect(this.owner).allowBids();
-    await awaitCoprocessor();
+    await awaitCoprocessor(hre);
   }
 
   // Step 2
@@ -314,14 +313,14 @@ export abstract class FHEAuctionMockTestCtx {
 
     for (let i = 0; i < total; ++i) {
       await this.engine.computeSort(1n); //N(N-1)/2
-      await awaitCoprocessor();
+      await awaitCoprocessor(hre);
       expect(await this.engine.sortProgress()).to.equal(i + 1);
     }
 
     expect(await this.engine.sortCompleted()).to.be.true;
     expect(await this.engine.sortProgress()).to.equal(total);
     await this.engine.connect(this.owner).allowRankedBids();
-    await awaitCoprocessor();
+    await awaitCoprocessor(hre);
 
     expect(await this.engine.canClaim()).to.be.false;
   }
@@ -335,7 +334,7 @@ export abstract class FHEAuctionMockTestCtx {
       expect(await this.engine.wonQuantitiesByRankReady()).to.be.false;
       // Gas cost ~= 250_000
       await this.engine.computeWonQuantitiesByRank(1n);
-      await awaitCoprocessor();
+      await awaitCoprocessor(hre);
       expect(await this.engine.wonQuantitiesByRankProgress()).to.equal(
         BigInt(i + 1)
       );
@@ -351,7 +350,7 @@ export abstract class FHEAuctionMockTestCtx {
     expect(await this.engine.wonQuantitiesByIdProgressMax()).to.equal(n * n);
     for (let i = 0; i < n * n; ++i) {
       await this.engine.computeWonQuantitiesById(1n);
-      await awaitCoprocessor();
+      await awaitCoprocessor(hre);
       expect(await this.engine.wonQuantitiesByIdProgress()).to.equal(
         BigInt(i + 1)
       );
@@ -366,8 +365,8 @@ export abstract class FHEAuctionMockTestCtx {
       "FHEAuctionEngineIterator",
       await this.engine.iterator()
     );
-    const minIter = await iterator.minIterationsForBlindClaim();
-    expect(await this.engine.canBlindClaim()).to.be.false;
+    const minIter = await iterator.minIterationsForPrizeAward();
+    expect(await this.engine.canAward()).to.be.false;
     expect(minIter).to.equal(n * (n + 1n));
 
     if (iters !== undefined) {
@@ -380,7 +379,7 @@ export abstract class FHEAuctionMockTestCtx {
       }
     }
 
-    expect(await this.engine.canBlindClaim()).to.be.true;
+    expect(await this.engine.canAward()).to.be.true;
     expect(await this.engineIterator().step()).to.equal(3);
     expect(await this.engineIterator().stepProgress()).to.equal(0);
   }
@@ -395,8 +394,8 @@ export abstract class FHEAuctionMockTestCtx {
     expect(await this.engine.canClaim()).to.be.false;
     expect(maxIter).to.equal(n * (2n * n + 1n));
 
-    const minIter = await iterator.minIterationsForBlindClaim();
-    expect(await this.engine.canBlindClaim()).to.be.false;
+    const minIter = await iterator.minIterationsForPrizeAward();
+    expect(await this.engine.canAward()).to.be.false;
     expect(minIter).to.equal(n * (n + 1n));
 
     for (let i = 0; i < iters.length; i++) {
@@ -477,6 +476,15 @@ export abstract class FHEAuctionMockTestCtx {
     }
   }
 
+  async expectCanClaim(bids: FHEBids, blindYes: boolean, directYes: boolean) {
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auction.canAwardPrizeAtRank(i)).to.equal(blindYes);
+      expect(await this.auction.connect(bids[i].bidder).canClaim()).to.equal(
+        directYes
+      );
+    }
+  }
+
   async expectWonQuantities(bids: FHEBids) {
     for (let i = 0; i < bids.length; ++i) {
       expect(await this.auctionTokenBalanceOf(bids[i].bidder)).to.equal(
@@ -513,7 +521,8 @@ export abstract class FHEAuctionMockTestCtx {
   async run(
     bids: FHEBids,
     expectedUniformPrice: bigint,
-    expectedBeneficiaryCollect?: bigint
+    expectedBeneficiaryCollect?: bigint,
+    skipDecryptUniformPrice?: boolean
   ) {
     bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
     const beneficiaryBalanceBefore = await this.paymentTokenBalanceOf(
@@ -527,15 +536,22 @@ export abstract class FHEAuctionMockTestCtx {
     await this.computeSort();
     await this.computeWonQuantitiesByRank();
     await this.computeWonQuantitiesById();
+    await this.expectCanClaim(bids, false, false);
+    if (skipDecryptUniformPrice === true) {
+      return;
+    }
+
     await this.auction.connect(this.owner).decryptUniformPrice();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     expect(await this.auction.clearUniformPrice()).to.equal(
       expectedUniformPrice
     );
+    await this.expectCanClaim(bids, true, true);
+
     for (let i = 0; i < bids.length; ++i) {
       expect(await this.auction.connect(bids[i].bidder).claim());
     }
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     await this.expectWonQuantities(bids);
     await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
     const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
@@ -548,10 +564,11 @@ export abstract class FHEAuctionMockTestCtx {
     }
   }
 
-  async runBlind(
+  async runUpToUniformPrice(
     bids: FHEBids,
     expectedUniformPrice: bigint,
-    expectedBeneficiaryCollect?: bigint
+    expectedBeneficiaryCollect?: bigint,
+    skipDecryptUniformPrice?: boolean
   ) {
     bids = this.fillBidsWithDefault(bids, expectedUniformPrice);
     const beneficiaryBalanceBefore = await this.paymentTokenBalanceOf(
@@ -564,21 +581,63 @@ export abstract class FHEAuctionMockTestCtx {
     await this.computeValidation();
     await this.computeSort();
     await this.computeWonQuantitiesByRank();
+    await this.expectCanClaim(bids, false, false);
+    if (skipDecryptUniformPrice === true) {
+      return { bids, beneficiaryBalanceBefore };
+    }
+
     await this.auction.connect(this.owner).decryptUniformPrice();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     expect(await this.auction.clearUniformPrice()).to.equal(
       expectedUniformPrice
     );
-    for (let i = 0; i < bids.length; ++i) {
-      expect(await this.auction.connect(bids[i].bidder).blindClaimRank(i));
-    }
-    await awaitAllDecryptionResults();
-    await this.expectWonQuantities(bids);
-    await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
-    const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
-      this.beneficiary
+    await this.expectCanClaim(bids, true, false);
+    return { bids, beneficiaryBalanceBefore };
+  }
+
+  async runUsingAward(
+    _bids: FHEBids,
+    expectedUniformPrice: bigint,
+    expectedBeneficiaryCollect?: bigint,
+    skipDecryptUniformPrice?: boolean
+  ) {
+    const { bids, beneficiaryBalanceBefore } = await this.runUpToUniformPrice(
+      _bids,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect,
+      skipDecryptUniformPrice
     );
-    if (expectedBeneficiaryCollect != undefined) {
+
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auction.connect(bids[i].bidder).awardPrizeAtRank(i));
+    }
+
+    await this.expectRunResult(
+      bids,
+      beneficiaryBalanceBefore,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect
+    );
+  }
+
+  async expectRunResult(
+    bids: FHEBids,
+    beneficiaryBalanceBefore?: bigint,
+    expectedUniformPrice?: bigint,
+    expectedBeneficiaryCollect?: bigint
+  ) {
+    await awaitAllDecryptionResults(hre);
+    await this.expectWonQuantities(bids);
+    if (expectedUniformPrice !== undefined) {
+      await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
+    }
+    if (
+      expectedBeneficiaryCollect != undefined &&
+      beneficiaryBalanceBefore != undefined
+    ) {
+      const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
+        this.beneficiary
+      );
       expect(beneficiaryBalanceAfter - beneficiaryBalanceBefore).to.equal(
         expectedBeneficiaryCollect
       );
@@ -616,14 +675,14 @@ export abstract class FHEAuctionMockTestCtx {
 
     await this.iterUntilBlindClaimReady(iters);
     await this.auction.connect(this.owner).decryptUniformPrice();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     expect(await this.auction.clearUniformPrice()).to.equal(
       expectedUniformPrice
     );
     for (let i = 0; i < bids.length; ++i) {
-      expect(await this.auction.connect(bids[i].bidder).blindClaimRank(i));
+      expect(await this.auction.connect(bids[i].bidder).awardPrizeAtRank(i));
     }
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     await this.expectWonQuantities(bids);
     await this.expectPaymentBalanceToEqualEnd(bids, expectedUniformPrice);
     const beneficiaryBalanceAfter = await this.paymentTokenBalanceOf(
@@ -647,6 +706,40 @@ export class FHEAuctionNativeMockTestCtx extends FHEAuctionMockTestCtx {
   constructor(params: FHEAuctionMockNativeTestParams) {
     super(params);
     this.auctionNative = params.auction;
+  }
+
+  async expectCanClaim(bids: FHEBids, blindYes: boolean, directYes: boolean) {
+    super.expectCanClaim(bids, blindYes, directYes);
+    for (let i = 0; i < bids.length; ++i) {
+      expect(
+        await this.auctionNative.connect(bids[i].bidder).canBlindClaim()
+      ).to.equal(blindYes);
+    }
+  }
+
+  async runUsingBlindClaim(
+    _bids: FHEBids,
+    expectedUniformPrice: bigint,
+    expectedBeneficiaryCollect?: bigint,
+    skipDecryptUniformPrice?: boolean
+  ) {
+    const { bids, beneficiaryBalanceBefore } = await this.runUpToUniformPrice(
+      _bids,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect,
+      skipDecryptUniformPrice
+    );
+
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auctionNative.connect(bids[i].bidder).blindClaim());
+    }
+
+    await this.expectRunResult(
+      bids,
+      beneficiaryBalanceBefore,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect
+    );
   }
 
   async depositSingle(bidder: HardhatEthersSigner, amount: bigint) {
@@ -752,6 +845,40 @@ export class FHEAuctionERC20MockTestCtx extends FHEAuctionMockTestCtx {
     this.paymentToken = params.paymentToken;
     this.paymentTokenAddr = params.paymentTokenAddr;
     this.paymentTokenOwner = params.paymentTokenOwner;
+  }
+
+  async expectCanClaim(bids: FHEBids, blindYes: boolean, directYes: boolean) {
+    super.expectCanClaim(bids, blindYes, directYes);
+    for (let i = 0; i < bids.length; ++i) {
+      expect(
+        await this.auctionERC20.connect(bids[i].bidder).canBlindClaim()
+      ).to.equal(blindYes);
+    }
+  }
+
+  async runUsingBlindClaim(
+    _bids: FHEBids,
+    expectedUniformPrice: bigint,
+    expectedBeneficiaryCollect?: bigint,
+    skipDecryptUniformPrice?: boolean
+  ) {
+    const { bids, beneficiaryBalanceBefore } = await this.runUpToUniformPrice(
+      _bids,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect,
+      skipDecryptUniformPrice
+    );
+
+    for (let i = 0; i < bids.length; ++i) {
+      expect(await this.auctionERC20.connect(bids[i].bidder).blindClaim());
+    }
+
+    await this.expectRunResult(
+      bids,
+      beneficiaryBalanceBefore,
+      expectedUniformPrice,
+      expectedBeneficiaryCollect
+    );
   }
 
   async depositSingle(

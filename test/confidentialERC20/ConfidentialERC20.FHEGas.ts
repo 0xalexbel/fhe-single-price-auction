@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { network } from "hardhat";
+import hre from "hardhat";
 
 import { getFHEGasFromTxReceipt } from "../coprocessorUtils";
 import { createInstance } from "../instance";
@@ -16,7 +16,7 @@ describe("ConfidentialERC20:FHEGas", function () {
     const contract = await deployConfidentialERC20Fixture();
     this.contractAddress = await contract.getAddress();
     this.erc20 = contract;
-    this.fhevm = await createInstance();
+    this.fhevm = await createInstance(hre);
   });
 
   it("gas consumed during transfer", async function () {
@@ -37,9 +37,9 @@ describe("ConfidentialERC20:FHEGas", function () {
     );
     const t2 = await tx.wait();
     expect(t2?.status).to.eq(1);
-    if (network.name === "hardhat") {
+    if (hre.network.name === "hardhat") {
       // `getFHEGasFromTxReceipt` function only works in mocked mode but gives same exact FHEGas consumed than on the real fhEVM
-      const FHEGasConsumedTransfer = getFHEGasFromTxReceipt(t2);
+      const FHEGasConsumedTransfer = getFHEGasFromTxReceipt(hre, t2);
       console.log("FHEGas Consumed during transfer", FHEGasConsumedTransfer);
     }
     // contrarily to FHEGas, native gas in mocked mode slightly differs from the real gas consumption on fhevm (underestimated by ~20%)
@@ -77,9 +77,9 @@ describe("ConfidentialERC20:FHEGas", function () {
       encryptedTransferAmount2.inputProof
     );
     const t3 = await tx3.wait();
-    if (network.name === "hardhat") {
+    if (hre.network.name === "hardhat") {
       // `getFHEGasFromTxReceipt` function only works in mocked mode but gives same exact FHEGas consumed than on the real fhEVM
-      const FHEGasConsumedTransferFrom = getFHEGasFromTxReceipt(t3);
+      const FHEGasConsumedTransferFrom = getFHEGasFromTxReceipt(hre, t3);
       console.log(
         "FHEGas Consumed during transferFrom",
         FHEGasConsumedTransferFrom

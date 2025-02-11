@@ -149,6 +149,72 @@ if (checkEnv()) {
       await ctx.run(bids, expectedUniformPrice);
     });
 
+    it("Claim without uniform price decryption should revert", async () => {
+      const expectedUniformPrice = 1000n;
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          price: 1000n,
+          quantity: 1n,
+          wonQuantity: 1n,
+        },
+        {
+          bidder: bidders[1],
+          price: 2000n,
+          quantity: 2n,
+          wonQuantity: 2n,
+        },
+      ];
+      await ctx.run(bids, expectedUniformPrice, undefined, true);
+      await expect(ctx.auction.connect(bids[0].bidder).claim())
+        .to.be.revertedWithCustomError(ctx.auction, "NotReadyForBidderClaim")
+        .withArgs(bids[0].bidder);
+    });
+
+    it("Blind claim without uniform price decryption should revert", async () => {
+      const expectedUniformPrice = 1000n;
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          price: 1000n,
+          quantity: 1n,
+          wonQuantity: 1n,
+        },
+        {
+          bidder: bidders[1],
+          price: 2000n,
+          quantity: 2n,
+          wonQuantity: 2n,
+        },
+      ];
+      await ctx.run(bids, expectedUniformPrice, undefined, true);
+      await expect(ctx.auctionERC20.connect(bids[0].bidder).blindClaim())
+        .to.be.revertedWithCustomError(ctx.auction, "NotReadyForPrizeAwarding")
+        .withArgs();
+    });
+
+    it("Blind claim rank without uniform price decryption should revert", async () => {
+      const expectedUniformPrice = 1000n;
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          price: 1000n,
+          quantity: 1n,
+          wonQuantity: 1n,
+        },
+        {
+          bidder: bidders[1],
+          price: 2000n,
+          quantity: 2n,
+          wonQuantity: 2n,
+        },
+      ];
+      await ctx.run(bids, expectedUniformPrice, undefined, true);
+      await expect(
+        ctx.auction.connect(bids[0].bidder).awardPrizeAtRank(0)
+      ).to.be.revertedWithCustomError(ctx.auction, "NotReadyForPrizeAwarding");
+    });
+
     it("2 valid bids: p(1) > p(2)", async () => {
       const expectedUniformPrice = 1000n;
       const bids: FHEBids = [
@@ -203,6 +269,33 @@ if (checkEnv()) {
       await ctx.run(bids, expectedUniformPrice);
     });
 
+    it("Award, 2 valid bids: p(1) < p(2)", async () => {
+      const expectedUniformPrice = 1000n;
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          id: 1n,
+          price: 1000n,
+          quantity: 1n,
+          startPaymentBalance: 1000n * 1n + 1500n, // price x quantity + extra
+          endPaymentBalance: 1500n, // extra
+          paymentDeposit: 1000n * 1n,
+          wonQuantity: 1n,
+        },
+        {
+          bidder: bidders[1],
+          id: 2n,
+          price: 2000n,
+          quantity: 2n,
+          startPaymentBalance: 2000n * 2n,
+          endPaymentBalance: 2000n, // = startPaymentBalance - 1000 x 2
+          paymentDeposit: 2000n * 2n,
+          wonQuantity: 2n,
+        },
+      ];
+      await ctx.runUsingAward(bids, expectedUniformPrice);
+    });
+
     it("Blind claim, 2 valid bids: p(1) < p(2)", async () => {
       const expectedUniformPrice = 1000n;
       const bids: FHEBids = [
@@ -227,7 +320,7 @@ if (checkEnv()) {
           wonQuantity: 2n,
         },
       ];
-      await ctx.runBlind(bids, expectedUniformPrice);
+      await ctx.runUsingBlindClaim(bids, expectedUniformPrice);
     });
 
     it("3 valid bids: p(1) < p(2) < p(3)", async () => {
@@ -378,6 +471,43 @@ if (checkEnv()) {
       await ctx.run(bids, expectedUniformPrice);
     });
 
+    it("Award, 3 valid bids: p(1) < p(2) < p(3)", async () => {
+      const expectedUniformPrice = 1000n;
+      const bids: FHEBids = [
+        {
+          bidder: bidders[0],
+          id: 1n,
+          price: 1000n,
+          quantity: 1n,
+          startPaymentBalance: 1000n,
+          endPaymentBalance: 0n,
+          paymentDeposit: 1000n,
+          wonQuantity: 1n,
+        },
+        {
+          bidder: bidders[1],
+          id: 2n,
+          price: 2000n,
+          quantity: 2n,
+          startPaymentBalance: 5000n,
+          endPaymentBalance: 3000n,
+          paymentDeposit: 4200n,
+          wonQuantity: 2n,
+        },
+        {
+          bidder: bidders[2],
+          id: 3n,
+          price: 3000n,
+          quantity: 3n,
+          startPaymentBalance: 10000n,
+          endPaymentBalance: 7000n,
+          paymentDeposit: 9900n,
+          wonQuantity: 3n,
+        },
+      ];
+      await ctx.runUsingAward(bids, expectedUniformPrice);
+    });
+
     it("Blind claim, 3 valid bids: p(1) < p(2) < p(3)", async () => {
       const expectedUniformPrice = 1000n;
       const bids: FHEBids = [
@@ -412,7 +542,7 @@ if (checkEnv()) {
           wonQuantity: 3n,
         },
       ];
-      await ctx.runBlind(bids, expectedUniformPrice);
+      await ctx.runUsingBlindClaim(bids, expectedUniformPrice);
     });
 
     it("4 valid bids: p(2) > p(1) > p(3) > p(4)", async () => {
@@ -580,7 +710,7 @@ if (checkEnv()) {
           wonQuantity: 0n,
         },
       ];
-      await ctx.runBlind(
+      await ctx.runUsingAward(
         bids,
         expectedUniformPrice,
         expectedBeneficiaryCollect

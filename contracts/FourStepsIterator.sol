@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-//import {console} from "hardhat/console.sol";
 
 interface IFourStepsIterable {
     function runStep1(uint32 progress, uint32 iter, uint32 progressMax) external returns (uint8, uint32);

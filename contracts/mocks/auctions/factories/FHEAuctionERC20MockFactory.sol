@@ -5,9 +5,7 @@ import {FHEAuctionERC20Factory} from "../../../auctions/factories/FHEAuctionERC2
 import {FHEAuctionERC20Mock} from "../FHEAuctionERC20Mock.sol";
 
 contract FHEAuctionERC20MockFactory is FHEAuctionERC20Factory {
-    constructor(FHEAuctionFactoryDetails memory details_)
-        FHEAuctionERC20Factory(details_)
-    {}
+    constructor(FHEAuctionFactoryDetails memory details_) FHEAuctionERC20Factory(details_) {}
 
     function _getCode() internal view virtual override returns (bytes memory) {
         return type(FHEAuctionERC20Mock).creationCode;

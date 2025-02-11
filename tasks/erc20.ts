@@ -2,24 +2,24 @@ import { types, scope } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-import { IERC20, IERC20Metadata, PaymentERC20 } from "../types";
+import { IERC20, IERC20Metadata } from "../types";
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { convertToAddress, convertToToken, logGas, toWei } from "./utils";
+import {
+  TASK_ALLOWANCE,
+  TASK_APPROVE,
+  TASK_BALANCE,
+  TASK_TRANSFER,
+} from "./task-names";
 
 const erc20Scope = scope("erc20", "ERC20 related commands");
 
-erc20Scope
-  .task("ttest")
-  .addOptionalParam("amount", "Amount of erc20 tokens to transfer")
-  .setAction(async function (
-    taskArguments: TaskArguments,
-    hre: HardhatRuntimeEnvironment
-  ) {
-    console.log(toWei(hre, taskArguments.amount, 0n));
-  });
+////////////////////////////////////////////////////////////////////////////////
+// Transfer
+////////////////////////////////////////////////////////////////////////////////
 
 erc20Scope
-  .task("transfer", "Transfers erc20 tokens")
+  .task(TASK_TRANSFER, "Transfers erc20 tokens")
   .addOptionalParam("amount", "Amount of erc20 tokens to transfer")
   .addOptionalParam("price", "Bid price (amount = price * quantity)")
   .addOptionalParam(
@@ -118,8 +118,12 @@ erc20Scope
     );
   });
 
+////////////////////////////////////////////////////////////////////////////////
+// Balance
+////////////////////////////////////////////////////////////////////////////////
+
 erc20Scope
-  .task("balance", "Prints the erc20 token balance of a specified account")
+  .task(TASK_BALANCE, "Prints the erc20 token balance of a specified account")
   .addParam("account", "account address or index")
   .addParam("token", "'payment', 'auction' or a token address")
   .setAction(async function (
@@ -152,11 +156,17 @@ erc20Scope
     const b = await erc20.balanceOf(accountAddr);
 
     console.info(`ERC20 Balance : ${b} (${sym}) (account: ${accountAddr})`);
+
+    return b;
   });
+
+////////////////////////////////////////////////////////////////////////////////
+// Allowance
+////////////////////////////////////////////////////////////////////////////////
 
 erc20Scope
   .task(
-    "allowance",
+    TASK_ALLOWANCE,
     "Prints the erc20 token allowance of a given (owner, spender) pair"
   )
   .addParam("owner", "owner address or index")
@@ -195,10 +205,16 @@ erc20Scope
     console.info(
       `Allowance : ${a} (owner: ${ownerAddr}, spender: ${spenderAddr}, token: ${tokenAddr})`
     );
+
+    return a;
   });
 
+////////////////////////////////////////////////////////////////////////////////
+// Approve
+////////////////////////////////////////////////////////////////////////////////
+
 erc20Scope
-  .task("approve", "Approve erc20 tokens")
+  .task(TASK_APPROVE, "Approve erc20 tokens")
   .addParam(
     "amount",
     "Amount of erc20 tokens to allow",

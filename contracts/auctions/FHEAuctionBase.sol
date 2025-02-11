@@ -14,8 +14,8 @@ import {FHEAuctionEngineIterator} from "../engines/FHEAuctionEngineIterator.sol"
 
 /**
  * @dev Abstract contract for implementing a Single Price Auction.
- * This implementation is payment-agnostic, supporting various types of payments such as Ether, ERC20 tokens, 
- * or encrypted ERC20 tokens. As a result, a payment or deposit locking mechanism must be implemented in a derived 
+ * This implementation is payment-agnostic, supporting various types of payments such as Ether, ERC20 tokens,
+ * or encrypted ERC20 tokens. As a result, a payment or deposit locking mechanism must be implemented in a derived
  * contract.
  *
  * Provides fundamental auction functionality, including:
@@ -38,7 +38,7 @@ abstract contract FHEAuctionBase is
     ReentrancyGuard,
     GatewayCaller
 {
-    uint8 constant CLAIMED = 1;
+    uint8 constant YES = 1;
 
     struct Bid {
         euint256 price;
@@ -49,20 +49,18 @@ abstract contract FHEAuctionBase is
     uint256 private immutable _minimumPaymentDeposit;
 
     address private _engine;
-    ///@dev _iterator == _engine.iterator(). 
+    ///@dev _iterator == _engine.iterator().
     ///@dev We keep a copy in order to minimize contract loading when calling progress-related view functions.
     address private _iterator;
     address private _beneficiary;
     IERC20 private _auctionToken;
     uint256 private _clearUniformPrice;
 
-    uint16 private _blindClaimRequestCount;
     uint16 private _claimCompletedCount;
-    uint16 private _blindClaimCompletedCount;
+    uint16 private _prizeAtRankAwardedCount;
 
-    mapping(address bidder => uint16) private _bidderToBlindClaimRankPlusOne;
     mapping(address bidder => uint8) private _claimCompleted;
-    mapping(uint16 rank => uint8) private _blindClaimCompleted;
+    mapping(uint16 rank => uint8) private _prizeAtRankAwarded;
     mapping(address bidder => Bid) private _bidderToBid;
 
     error BidderNotRegistered(address bidder);
@@ -74,9 +72,9 @@ abstract contract FHEAuctionBase is
     error InvalidAuctionQuantity(uint256 quantity);
     error InvalidTieBreakingRule(uint8 tieBreakingRule);
     error AlreadyClaimed(address bidder);
-    error NotReadyToClaim(address bidder);
-    error RankAlreadyClaimed(uint16 rank);
-    error NotReadyToClaimRank();
+    error NotReadyForBidderClaim(address bidder);
+    error PrizeAlreadyAwardedAtRank(uint16 rank);
+    error NotReadyForPrizeAwarding();
     error UniformPriceNotReadyToDecrypt();
 
     /**
@@ -85,7 +83,7 @@ abstract contract FHEAuctionBase is
      * @param balance The current payment token balance of the account.
      * @param needed The required payment token balance to complete the operation.
      */
-    error InsufficientBalance(uint256 balance, uint256 needed);
+    error InsufficientPaymentDeposit(uint256 balance, uint256 needed);
 
     /**
      * @notice Thrown when the payment penalty exceeds the requested minimum payment token balance.
@@ -123,11 +121,6 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Returns `true` if the auction's payment token is the native EVM token
-     */
-    function isNative() public virtual pure returns (bool);
-
-    /**
      * @notice Initializes the auction with a specified auction engine and parameters.
      *
      * @notice Requirements:
@@ -144,11 +137,13 @@ abstract contract FHEAuctionBase is
      * @param auctionQuantity_ Total quantity of tokens to be auctioned.
      * @param maxBidCount_ Maximum number of bids.
      */
-    function initialize(address engine_, address beneficiary_, IERC20 auctionToken_, uint256 auctionQuantity_, uint16 maxBidCount_)
-        external
-        onlyOwner
-        nonReentrant
-    {
+    function initialize(
+        address engine_,
+        address beneficiary_,
+        IERC20 auctionToken_,
+        uint256 auctionQuantity_,
+        uint16 maxBidCount_
+    ) external onlyOwner nonReentrant {
         if (engine_ == address(0) || Ownable(engine_).owner() != address(this)) {
             revert InvalidEngine(engine_);
         }
@@ -190,7 +185,7 @@ abstract contract FHEAuctionBase is
     /**
      * @notice Reverts if the caller is not a registered bidder
      */
-    function _checkBidder() internal view virtual {
+    function _checkBidder() internal view {
         if (!_registered(msg.sender)) {
             revert BidderNotRegistered(msg.sender);
         }
@@ -268,34 +263,34 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Returns the auction computation iterations progress. 
+     * @notice Returns the auction computation iterations progress.
      */
     function computedIterations() external view returns (uint64) {
         return FHEAuctionEngineIterator(_iterator).iterProgress();
     }
 
     /**
-     * @notice Returns the minimum number of computation iterations required to execute a blind claim.
-     * `minIterationsForBlindClaim()` < `minIterationsForClaim()`
+     * @notice Returns the minimum number of computation iterations required to award a prize to a winning bidder.
+     * `minIterationsForPrizeAward()` < `minIterationsForClaim()`
      */
-    function minIterationsForBlindClaim() external view returns (uint64) {
-        return FHEAuctionEngineIterator(_iterator).minIterationsForBlindClaim();
+    function minIterationsForPrizeAward() external view returns (uint64) {
+        return FHEAuctionEngineIterator(_iterator).minIterationsForPrizeAward();
     }
 
     /**
      * @notice Returns the minimum number of computation iterations required to execute a claim.
-     * `minIterationsForClaim()` > `minIterationsForBlindClaim()`
+     * `minIterationsForClaim()` > `minIterationsForPrizeAward()`
      */
     function minIterationsForClaim() external view returns (uint64) {
         return FHEAuctionEngineIterator(_iterator).iterProgressMax();
     }
 
     /**
-     * @notice Reverts if `balance` is less than the required minimum deposit amount of payment tokens.
+     * @notice Reverts if `amount` is less than the required minimum deposit amount of payment tokens.
      */
-    function _requireSufficientBalance(uint256 balance) internal view virtual {
-        if (balance < _minimumPaymentDeposit) {
-            revert InsufficientBalance(balance, _minimumPaymentDeposit);
+    function _requireSufficientPaymentDeposit(uint256 amount) internal view {
+        if (amount < _minimumPaymentDeposit) {
+            revert InsufficientPaymentDeposit(amount, _minimumPaymentDeposit);
         }
     }
 
@@ -416,7 +411,9 @@ abstract contract FHEAuctionBase is
      *
      * Gas cost: max 865_000, min 815_000
      */
-    function _bid(address bidder, einput inPrice, einput inQuantity, bytes calldata inputProof) internal virtual {
+    function _bid(address bidder, einput inPrice, einput inQuantity, bytes calldata inputProof) internal {
+        _checkBidderPaymentDeposit(bidder);
+
         Bid memory newBid =
             Bid({price: TFHE.asEuint256(inPrice, inputProof), quantity: TFHE.asEuint256(inQuantity, inputProof)});
 
@@ -434,6 +431,12 @@ abstract contract FHEAuctionBase is
 
         _bidderToBid[bidder] = newBid;
     }
+
+    // ====================================================================== //
+    //
+    //               ⭐️ Claim functions (Pull prize awarding) ⭐️
+    //
+    // ====================================================================== //
 
     /**
      * @notice Returns `true` if the caller's auction prize is ready to be claimed, `false` otherwise.
@@ -458,18 +461,17 @@ abstract contract FHEAuctionBase is
      *
      * @param bidder address of the bidder
      */
-    function _canClaim(address bidder) internal view virtual returns (bool) {
+    function _canClaim(address bidder) internal view returns (bool) {
         if (claimCompleted(bidder)) {
             // Cannot claim twice
             return false;
         }
 
         if (!IFHEAuctionEngine(_engine).canClaim()) {
-            // Computation is not complete
             return false;
         }
 
-        return true;
+        return _canAward();
     }
 
     /**
@@ -493,21 +495,18 @@ abstract contract FHEAuctionBase is
             revert AlreadyClaimed(bidder);
         }
 
+        if (!_canAward()) {
+            revert NotReadyForBidderClaim(bidder);
+        }
+
         (euint256 validatedPrice, euint256 wonQuantity) =
             IFHEAuctionEngine(_engine).validatedPriceAndWonQuantityById(id);
         if (euint256.unwrap(wonQuantity) == 0) {
-            revert NotReadyToClaim(bidder);
+            revert NotReadyForBidderClaim(bidder);
         }
 
-        _claim(bidder, id, validatedPrice, wonQuantity);
+        _awardWinningBidForBidder(bidder, id, validatedPrice, wonQuantity);
     }
-
-    /**
-     * @dev Abstract internal function to process a claim for the bid placed by bidder `bidder`.
-     * Must be implemented by derived contracts to handle claims based on the bidder address, clear ID,
-     * encrypted validated price, and encrypted won quantity.
-     */
-    function _claim(address bidder, uint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
 
     /**
      * @notice Returns `true` if the `bidder` has successfully claimed their auction prize, `false` otherwise.
@@ -515,24 +514,14 @@ abstract contract FHEAuctionBase is
      * @return completed A boolean indicating whether the bidder's auction prize has been successfully claimed.
      */
     function claimCompleted(address bidder) public view returns (bool) {
-        return _claimCompleted[bidder] == CLAIMED;
+        return _claimCompleted[bidder] == YES;
     }
 
     /**
      * @notice Returns the number of completed claims.
      */
-    function totalClaimsCompleted() public view returns(uint16) {
-        return _claimCompletedCount; 
-    }
-
-    /**
-     * @notice Returns the total number of blind claim requests made so far.
-     *
-     * The number of remaining bidders who have not yet performed a blind claim can be calculated as:
-     * `bidCount() - totalBlindClaimsRequested()`.
-     */
-    function totalBlindClaimsRequested() public view returns(uint16) {
-        return _blindClaimRequestCount; 
+    function totalClaimsCompleted() public view returns (uint16) {
+        return _claimCompletedCount;
     }
 
     /**
@@ -550,180 +539,107 @@ abstract contract FHEAuctionBase is
         if (claimCompleted(bidder)) {
             revert AlreadyClaimed(bidder);
         }
-        _claimCompleted[bidder] = CLAIMED;
+        _claimCompleted[bidder] = YES;
         _claimCompletedCount++;
     }
 
-    /**
-     * @notice Returns `true` if the auction is ready for blind claim, `false` otherwise.
-     *
-     * @notice Conditions for a successful blind claim:
-     * - The auction must be closed (ie. the auction is not accepting any additional bid).
-     * - The engine must be ready for blind claim.
-     * - The caller must be a registered bidder.
-     */
-    function canBlindClaim() public view whenClosed onlyBidder returns (bool) {
-        return IFHEAuctionEngine(_engine).canBlindClaim();
-    }
+    // ====================================================================== //
+    //
+    //              ⭐️ Award functions (Push prize awarding) ⭐️
+    //
+    // ====================================================================== //
 
     /**
-     * @notice Returns `true` if the auction prize ranked at position `rank` is ready to be claimed, `false` otherwise.
+     * @notice Returns `true` if the auction prize ranked at position `rank` is ready to be awarded, `false` otherwise.
      *
      * @notice Requirements:
      * - The auction must be closed (ie. the auction is not accepting any additional bid).
-     * - see {_canBlindClaimRank} for additional requirements.
+     * - see {_canAwardPrizeByRank} for additional requirements.
      *
      * @param rank The zero-based rank of the unidentified bidder for whom the prize is being claimed.
      */
-    function canBlindClaimRank(uint16 rank) public view whenClosed returns (bool) {
-        return _canBlindClaimRank(rank);
-    }
-
-    /**
-     * @notice Returns `true` the auction prize ranked at position `rank` is ready to be claimed, `false` otherwise.
-     * Internal function without access restriction.
-     * This function is meant to be overriden to add extra conditions for a successfull claim.
-     *
-     * @notice Conditions for a successful claim:
-     * - All ranked won quantities have been computed by the auction `_engine`.
-     * - The prize at rank position `rank` has not yet been claimed.
-     *
-     * @param rank The zero-based rank of the unidentified bidder for whom the prize is being claimed.
-     */
-    function _canBlindClaimRank(uint16 rank) internal view virtual returns (bool) {
-        if (blindClaimRankCompleted(rank)) {
-            // Cannot claim rank twice
+    function canAwardPrizeAtRank(uint16 rank) public view whenClosed returns (bool) {
+        if (isPrizeAtRankAwarded(rank)) {
+            // Cannot award rank twice
             return false;
         }
 
-        if (!IFHEAuctionEngine(_engine).canBlindClaim()) {
-            // Computation is not complete
+        return _canAwardPrizeByRank();
+    }
+
+    /**
+     * @dev Internal function, should be overriden by derived contracts to add extra requirements.
+     */
+    function _canAwardPrizeByRank() internal view returns (bool) {
+        if (!IFHEAuctionEngine(_engine).canAward()) {
             return false;
         }
 
-        return true;
+        return _canAward();
     }
 
     /**
-     * @notice Allows a registered bidder to claim the auction prize on behalf of an anonymous bidder ranked at 
-     * position `rank`. The prize is awarded to the unidentified bidder at the final uniform price determined 
-     * by the auction. The caller acts as an intermediary and does not directly receive the prize.  
-     *
-     * @dev Requirements:
-     * - The caller must be a registered bidder.
-     * - The auction must be closed.
-     * - The auction engine must have finalized the computation of winning quantities for all bidders.
-     * - The specified rank must not have already been claimed.
-     *
-     * @dev Each bidder is assigned a unique and constant claim rank. A bidder can claim the same rank multiple times. 
-     * If the bidder has not yet requested a blind claim, they are assigned the next available claim rank.  
-     */
-    function blindClaim() external nonReentrant whenClosed {
-        address bidder = msg.sender;
-
-        uint16 blindRankPlusOne = _bidderToBlindClaimRankPlusOne[bidder];
-
-        if (blindRankPlusOne == 0) {
-            uint16 id = IFHEAuctionEngine(_engine).bidderId(bidder);
-            if (id == 0) {
-                revert BidderNotRegistered(bidder);
-            }
-
-            blindRankPlusOne = _blindClaimRequestCount + 1;
-            _bidderToBlindClaimRankPlusOne[bidder] = blindRankPlusOne;
-            _blindClaimRequestCount = blindRankPlusOne;
-        }
-
-        if (blindClaimRankCompleted(blindRankPlusOne - 1)) {
-            return;
-        }
-
-        _blindClaimRank(blindRankPlusOne - 1);
-    }
-
-    /**
-     * @notice Returns `true` if the caller has already executed a blind claim, `false` otherwise.
-     */
-    function hasBlindClaimed() external view returns(bool) {
-        return _bidderToBlindClaimRankPlusOne[msg.sender] != 0;
-    }
-
-    /**
-     * @notice Returns `true` if the prize for the unidentified bidder assigned to the caller has been successfully
-     * claimed via {blindClaim}, `false` otherwise.
-     * @return completed `true` if the prize has been successfully claimed, `false` otherwise.
-     */
-    function blindClaimCompleted() external view returns(bool) {
-        uint16 blindRankPlusOne = _bidderToBlindClaimRankPlusOne[msg.sender];
-        if (blindRankPlusOne == 0) {
-            return false;
-        }
-        return blindClaimRankCompleted(blindRankPlusOne - 1);
-    }
-
-    /**
-     * @notice Blindly claims the auction prize on behalf of the unidentified bidder ranked at position `rank`.
+     * @notice Distributes the auction prize to the bidder ranked at position `rank`.
      * The prize is awarded to the bidder at the final uniform price determined by the auction.
      * The caller acts as an intermediary and does not directly receive the prize.
      *
      * @dev Requirements:
      * - The auction must be closed.
-     * - The auction engine must have computed the final won quantities for all bidders.
-     * - The specified rank must not have already been claimed.
+     * - The auction engine must have computed the final uniform price.
+     * - The auction engine must have computed the final winning quantities for all bidders.
+     * - The specified rank must not have already received its prize.
      *
-     * @param rank The zero-based rank of the bidder for whom the prize is being claimed.
+     * @param rank The zero-based rank of the bidder to whom the prize is being distributed.
      */
-    function blindClaimRank(uint16 rank) external nonReentrant whenClosed {
-        if (blindClaimRankCompleted(rank)) {
-            revert RankAlreadyClaimed(rank);
+    function awardPrizeAtRank(uint16 rank) external nonReentrant whenClosed {
+        if (isPrizeAtRankAwarded(rank)) {
+            revert PrizeAlreadyAwardedAtRank(rank);
         }
 
-        _blindClaimRank(rank);
+        _awardPrizeAtRank(rank);
     }
 
     /**
-     * @dev Internal function to process a claim for the bid ranked at `rank`. This function is shared between
-     * {blindClaimRank} and {blindClaim}
+     * @dev Internal function to process a claim for the bid ranked at `rank`.
      */
-    function _blindClaimRank(uint16 rank) internal {
+    function _awardPrizeAtRank(uint16 rank) internal {
+        if (!_canAwardPrizeByRank()) {
+            revert NotReadyForPrizeAwarding();
+        }
+
         (euint16 id, euint256 validatedPrice, euint256 wonQuantity) = IFHEAuctionEngine(_engine).getWonBidByRank(rank);
         if (euint256.unwrap(wonQuantity) == 0) {
-            revert NotReadyToClaimRank();
+            revert NotReadyForPrizeAwarding();
         }
 
-        _claimRank(rank, id, validatedPrice, wonQuantity);
+        _awardWinningBidAtRank(rank, id, validatedPrice, wonQuantity);
     }
 
     /**
-     * @dev Abstract internal function to process a claim for the bid ranked at `rank`.
-     * Must be implemented by derived contracts to handle claims based on the clear rank, encrypted ID,
-     * encrypted validated price, and encrypted won quantity.
+     * @notice Returns `true` if the prize for the bidder at the specified `rank` has been successfully
+     * awarded via the {awardPrizeAtRank} function, `false` otherwise.
+     * This indicates whether the prize for the bidder ranked at `rank` has already been awarded.
+     *
+     * @param rank The zero-based rank of the bidder.
+     * @return completed `true` if the prize has been awarded, `false` otherwise.
      */
-    function _claimRank(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
-
-    /**
-     * @notice Returns `true` if the prize for the unidentified bidder at the specified `rank` has been successfully
-     * claimed via {blindClaimRank}, `false` otherwise.
-     * @param rank The zero-based rank of the unidentified bidder.
-     * @return completed `true` if the prize has been successfully claimed, `false` otherwise.
-     */
-    function blindClaimRankCompleted(uint16 rank) public view returns (bool) {
-        return _blindClaimCompleted[rank] == CLAIMED;
+    function isPrizeAtRankAwarded(uint16 rank) public view returns (bool) {
+        return _prizeAtRankAwarded[rank] == YES;
     }
 
-    function _markBlindClaimRankCompleted(uint16 rank) internal {
-        if (blindClaimRankCompleted(rank)) {
-            revert RankAlreadyClaimed(rank);
+    function _markPrizeAtRankAwarded(uint16 rank) internal {
+        if (isPrizeAtRankAwarded(rank)) {
+            revert PrizeAlreadyAwardedAtRank(rank);
         }
-        _blindClaimCompleted[rank] = CLAIMED;
-        _blindClaimCompletedCount++;
+        _prizeAtRankAwarded[rank] = YES;
+        _prizeAtRankAwardedCount++;
     }
 
     /**
      * @dev See {TimedAuction-_canTerminateAfterStart}.
      */
     function _canTerminateAfterStart() internal view override returns (bool) {
-        return _claimCompletedCount == bidCount() || _blindClaimCompletedCount == bidCount();
+        return _claimCompletedCount == bidCount() || _prizeAtRankAwardedCount == bidCount();
     }
 
     /**
@@ -797,19 +713,10 @@ abstract contract FHEAuctionBase is
      * - The auction must be open, meaning it is currently accepting bids.
      */
     function cancelBid() external nonReentrant whenIsOpen onlyBidder {
-        _cancelBid(msg.sender);
-    }
+        _bidderToBid[msg.sender] = Bid({price: euint256.wrap(0), quantity: euint256.wrap(0)});
+        IFHEAuctionEngine(_engine).removeBid(msg.sender);
 
-    /**
-     * @notice Internal function without access restrictions.
-     * @dev This function is intended to be overridden in derived contracts to implement
-     * additional operations that should occur when a bid is canceled.
-     *
-     * @param bidder The address of the bidder whose bid is being canceled.
-     */
-    function _cancelBid(address bidder) internal virtual {
-        _bidderToBid[bidder] = Bid({price: euint256.wrap(0), quantity: euint256.wrap(0)});
-        IFHEAuctionEngine(_engine).removeBid(bidder);
+        _cancelBid(msg.sender);
     }
 
     /**
@@ -831,11 +738,12 @@ abstract contract FHEAuctionBase is
     }
 
     /**
-     * @notice Initiate the decryption of the auction final uniform price.
+     * @notice Initiate the decryption of the auction final uniform price. The function is public since the uniform 
+     * price is publicly available via {clearUniformPrice}
      * @notice Requirements:
      * - Can only be called after the auction ends and the uniform price has been computed by the engine
      */
-    function decryptUniformPrice() public onlyOwner nonReentrant whenInitialized {
+    function decryptUniformPrice() external nonReentrant whenInitialized {
         euint256 pu = IFHEAuctionEngine(_engine).getUniformPrice();
         if (!TFHE.isInitialized(pu)) {
             revert UniformPriceNotReadyToDecrypt();
@@ -857,4 +765,48 @@ abstract contract FHEAuctionBase is
     function callbackDecryptUniformPrice(uint256, /*requestID*/ uint256 resultDecryption) external onlyGateway {
         _clearUniformPrice = resultDecryption;
     }
+
+    // ====================================================================== //
+    //
+    //                     ⭐️ Abstract functions ⭐️
+    //
+    // ====================================================================== //
+
+    /**
+     * @notice Returns `true` if the auction's payment token is the native EVM token
+     */
+    function isNative() public pure virtual returns (bool);
+
+    /**
+     * @dev Abstract internal function. Should revert if the `bidder`'s deposit amount of payment tokens is invalid.
+     */
+    function _checkBidderPaymentDeposit(address bidder) internal view virtual;
+
+    /**
+     * @dev Abstract internal function. Should return `true` if the auction is ready to award prizes. 
+     */
+    function _canAward() internal view virtual returns (bool);
+
+    /**
+     * @dev Abstract internal function to process a claim for the bid placed by bidder `bidder`.
+     * Must be implemented by derived contracts to handle claims based on the bidder address, clear ID,
+     * encrypted validated price, and encrypted won quantity.
+     */
+    function _awardWinningBidForBidder(address bidder, uint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
+
+    /**
+     * @dev Abstract internal function to process the distribution of the winning bid at a specified rank.
+     * Derived contracts must implement this function to handle the distribution logic based on the rank, encrypted ID,
+     * validated price, and won quantity.
+     */
+    function _awardWinningBidAtRank(uint16 rank, euint16 id, euint256 validatedPrice, euint256 wonQuantity) internal virtual;
+
+    /**
+     * @dev Abstract internal function without access restrictions.
+     * @dev This function is intended to be overridden in derived contracts to implement
+     * additional operations that should occur when a bid is canceled.
+     *
+     * @param bidder The address of the bidder whose bid is being canceled.
+     */
+    function _cancelBid(address bidder) internal virtual;
 }

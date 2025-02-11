@@ -4,10 +4,9 @@ pragma solidity ^0.8.24;
 import {einput} from "fhevm/lib/TFHE.sol";
 import {FHEAuction} from "./FHEAuction.sol";
 import {FHEAuctionBase} from "./FHEAuctionBase.sol";
+import {FHEAuctionBlindClaimable} from "./extensions/FHEAuctionBlindClaimable.sol";
 
-//import {console} from "hardhat/console.sol";
-
-contract FHEAuctionNative is FHEAuction {
+contract FHEAuctionNative is FHEAuction, FHEAuctionBlindClaimable {
     /**
      * @dev See {FHEAuctionBase-constructor}
      */
@@ -18,7 +17,7 @@ contract FHEAuctionNative is FHEAuction {
     /**
      * @dev See {FHEAuctionBase-isNative}.
      */
-    function isNative() public override pure returns (bool) {
+    function isNative() public pure override returns (bool) {
         return true;
     }
 
@@ -36,7 +35,7 @@ contract FHEAuctionNative is FHEAuction {
     {
         address bidder = msg.sender;
         uint256 newBalance = balanceOf(bidder) + msg.value;
-        _requireSufficientBalance(newBalance);
+        _requireSufficientPaymentDeposit(newBalance);
         _updatePaymentTokenAfterDeposit(bidder, msg.value);
 
         _bid(bidder, inPrice, inQuantity, inputProof);

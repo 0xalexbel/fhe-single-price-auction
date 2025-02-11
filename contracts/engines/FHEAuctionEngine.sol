@@ -33,7 +33,7 @@ import {
  *   {FHEAuctionEngineIterator}, is responsible for managing the paging mechanism. It orchestrates the
  *   progressive execution of auction computation cycles until completion.
  *
- * - A drawback of such iterative approach is the extra native gas cost required to read/write additional state 
+ * - A drawback of such iterative approach is the extra native gas cost required to read/write additional state
  *   variables required to save the computation status between two consecutive computation transactions.
  *
  * ### Contract Size Limit
@@ -54,20 +54,20 @@ import {
  *
  * ### Approach
  *
- * A bit-level strategy would have been optimal in terms of FHE cost; however, the resulting native gas cost 
- * would be overwhelming. The primary reason is that the current version of TFHE library lacks batch functions 
- * or high-level bitwise operations (such as array manipulations or tensor operations). 
+ * A bit-level strategy would have been optimal in terms of FHE cost; however, the resulting native gas cost
+ * would be overwhelming. The primary reason is that the current version of TFHE library lacks batch functions
+ * or high-level bitwise operations (such as array manipulations or tensor operations).
  * As a result, a more "brute force" approach manipulating encrypted integers is necessary.
  *
- * The algorithm consists in 4 steps, with the last one beeing optional. 
+ * The algorithm consists in 4 steps, with the last one beeing optional.
  *
- *  |  Steps                     |  Cost    | 
+ *  |  Steps                     |  Cost    |
  *  |----------------------------|----------|
  *  |  1. Bid validation         |  O(N)    |
  *  |  2. Bid ranking            |  O(N^2)  |
- *  |  3. Won Quantities by rank |  O(N)    | 
+ *  |  3. Won Quantities by rank |  O(N)    |
  *  |  4. Won Quantities by id   |  O(N^2)  |
- *   
+ *
  * ### Step 1: Bid validation. O(N)
  *
  * The first step is to sanitize the list of registered bids by evaluating each one individually. If a bid fails to meet
@@ -171,7 +171,7 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
     euint256 private _cumulativeQuantity;
     euint256 private _uniformPrice;
 
-    ///@dev A precomputed zero euint256 to minimize the `TFHE.asEuint256(0)` calls 
+    ///@dev A precomputed zero euint256 to minimize the `TFHE.asEuint256(0)` calls
     euint256 private immutable _eZeroU256;
 
     // Step 2: Bid ranking. O(N^2)
@@ -261,13 +261,15 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
     }
 
     /**
-     * @param auctionOrInitialOwner_ The address of the `FHEAuctionBase` contract that owns this auction engine or the 
+     * @param auctionOrInitialOwner_ The address of the `FHEAuctionBase` contract that owns this auction engine or the
      * address of the initial owner. If the engine initial owner is not the auction contract, a transfer ownership must
      * be performed to give ownership to the auction contract.
-     * @param tieBreakingRule_ The tie-breaking rule used by the auction engine to resolve ties. 
+     * @param tieBreakingRule_ The tie-breaking rule used by the auction engine to resolve ties.
      * @param iterator_ The addre.
      */
-    constructor(address auctionOrInitialOwner_, uint8 tieBreakingRule_, address iterator_) Ownable(auctionOrInitialOwner_) {
+    constructor(address auctionOrInitialOwner_, uint8 tieBreakingRule_, address iterator_)
+        Ownable(auctionOrInitialOwner_)
+    {
         if (iterator_ == address(0) || Ownable(iterator_).owner() != auctionOrInitialOwner_) {
             revert InvalidIterator();
         }
@@ -468,7 +470,7 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
     /**
      * @notice Returns `true` if all ranked won quantities have been computed (step #3),
      */
-    function canBlindClaim() external view returns (bool) {
+    function canAward() external view returns (bool) {
         return _wonQuantitiesByRankReady;
     }
 
@@ -1052,7 +1054,6 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
             euint256 wonQuantity = TFHE.select(isValid, TFHE.min(remainingQuantity, bidQuantity), _eZeroU256);
 
             cumulativeQuantity = TFHE.add(cumulativeQuantity, bidQuantity);
-
             uniformPrice = TFHE.select(isValid, bidPrice, uniformPrice);
 
             TFHE.allowThis(wonQuantity);
@@ -1094,7 +1095,7 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
     //        ⭐️ Step 4/4: Compute Won Quantities O(N^2) (Optional) ⭐️
     //
     // ====================================================================== //
- 
+
     /**
      * @notice Computes a set of `iter` iteration cycles for the step #4.
      * see function {computeValidation}
@@ -1115,7 +1116,12 @@ abstract contract FHEAuctionEngine is SepoliaZamaFHEVMConfig, Ownable, IFourStep
         euint256 quantity = _quantityWQ;
 
         // Debug
-        if (!(idxWQ < _bidCount && resumeIdxWQ < _bidCount && (idxWQ * _bidCount + resumeIdxWQ + iter <= _bidCount * _bidCount))) {
+        if (
+            !(
+                idxWQ < _bidCount && resumeIdxWQ < _bidCount
+                    && (idxWQ * _bidCount + resumeIdxWQ + iter <= _bidCount * _bidCount)
+            )
+        ) {
             revert DebugEngineError(14);
         }
         // Debug

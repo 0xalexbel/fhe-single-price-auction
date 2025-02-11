@@ -10,7 +10,9 @@ import {FHEAuctionBase} from "../FHEAuctionBase.sol";
 contract FHEAuctionNativeFactory is FHEAuctionFactory {
     constructor(FHEAuctionFactoryDetails memory details_) FHEAuctionFactory(details_) {}
 
-    event FHEAuctionNativeDeployed(address indexed auction_, bytes32 indexed salt_, address beneficiary_, address auctionToken_);
+    event FHEAuctionNativeDeployed(
+        address indexed auction_, bytes32 indexed salt_, address beneficiary_, address auctionToken_
+    );
 
     function isNative() public view virtual override returns (bool) {
         return true;
@@ -62,7 +64,7 @@ contract FHEAuctionNativeFactory is FHEAuctionFactory {
             bytes memory code = _getCode();
             bytes memory constructData = abi.encode(minimumPaymentDeposit_, paymentPenalty_);
             bytes memory bytecode = abi.encodePacked(code, constructData);
-            
+
             // Reentrancy
             address computedAuctionAddr = Create2.computeAddress(deploySalt, keccak256(bytecode));
             _setAuction(deploySalt, computedAuctionAddr);
@@ -80,7 +82,7 @@ contract FHEAuctionNativeFactory is FHEAuctionFactory {
         auction.initialize(engine, beneficiary_, IERC20(auctionToken_), auctionQuantity_, maxBidCount_);
         auction.transferOwnership(auctionOwner_);
 
-        emit FHEAuctionNativeDeployed(auctionAddr, salt_, beneficiary_, address(auctionToken_) );
+        emit FHEAuctionNativeDeployed(auctionAddr, salt_, beneficiary_, address(auctionToken_));
 
         return auctionAddr;
     }

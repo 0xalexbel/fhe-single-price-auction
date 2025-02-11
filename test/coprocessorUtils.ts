@@ -1,10 +1,10 @@
 import { log2 } from "extra-bigint";
-import { ethers } from "hardhat";
-import hre from "hardhat";
 import { Database } from "sqlite3";
 
-import { TFHEEXECUTOR_ADDRESS } from "./constants";
-import operatorPrices from "./operatorPrices.json";
+import { TFHEEXECUTOR_ADDRESS } from "../test/constants";
+import operatorPrices from "../test/operatorPrices.json";
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { Log, TransactionReceipt } from "ethers";
 
 const executorAddress = TFHEEXECUTOR_ADDRESS;
 
@@ -20,7 +20,7 @@ const db = new Database(":memory:");
 
 export function insertSQL(
   handle: string,
-  clearText: bigint,
+  clearText: bigint | string,
   replace: boolean = false
 ) {
   if (replace) {
@@ -54,6 +54,7 @@ export const getClearText = async (handle: bigint): Promise<string> => {
           if (err) {
             reject(new Error(`Error querying database: ${err.message}`));
           } else if (row) {
+            //@ts-ignore
             resolve(row.clearText);
           } else if (attempts < maxRetries) {
             attempts++;
@@ -134,8 +135,10 @@ function bitwiseNotUintBits(value: bigint, numBits: number) {
   return ~value & BIT_MASK;
 }
 
-export const awaitCoprocessor = async (): Promise<void> => {
-  await processAllPastTFHEExecutorEvents();
+export const awaitCoprocessor = async (
+  hre: HardhatRuntimeEnvironment
+): Promise<void> => {
+  await processAllPastTFHEExecutorEvents(hre);
 };
 
 const abi = [
@@ -172,10 +175,13 @@ const abi = [
   "event FheRandBounded(uint256 upperBound, bytes1 randType, uint256 result)",
 ];
 
-async function processAllPastTFHEExecutorEvents() {
-  const provider = ethers.provider;
+async function processAllPastTFHEExecutorEvents(
+  hre: HardhatRuntimeEnvironment
+) {
+  const provider = hre.ethers.provider;
   const latestBlockNumber = await provider.getBlockNumber();
 
+  //@ts-ignore
   if (hre.__SOLIDITY_COVERAGE_RUNNING !== true) {
     // evm_snapshot is not supported in coverage mode
     [lastBlockSnapshot, lastCounterRand] = await provider.send(
@@ -187,7 +193,7 @@ async function processAllPastTFHEExecutorEvents() {
     }
   }
 
-  const contract = new ethers.Contract(executorAddress, abi, provider);
+  const contract = new hre.ethers.Contract(executorAddress, abi, provider);
 
   // Fetch all events emitted by the contract
   const filter = {
@@ -201,7 +207,7 @@ async function processAllPastTFHEExecutorEvents() {
   const events = logs
     .map((log) => {
       try {
-        const parsedLog = contract.interface.parseLog(log);
+        const parsedLog = contract.interface.parseLog(log)!;
         return {
           eventName: parsedLog.name,
           args: parsedLog.args,
@@ -214,14 +220,18 @@ async function processAllPastTFHEExecutorEvents() {
     .filter((event) => event !== null);
 
   firstBlockListening = latestBlockNumber + 1;
+  //@ts-ignore
   if (hre.__SOLIDITY_COVERAGE_RUNNING !== true) {
     // evm_snapshot is not supported in coverage mode
     await provider.send("set_lastBlockSnapshot", [firstBlockListening]);
   }
-  events.map(async (event) => await insertHandleFromEvent(event));
+  events.map(async (event) => await insertHandleFromEvent(hre, event));
 }
 
-async function insertHandleFromEvent(event: FHEVMEvent) {
+async function insertHandleFromEvent(
+  hre: HardhatRuntimeEnvironment,
+  event: FHEVMEvent
+) {
   let handle;
   let clearText;
   let clearLHS;
@@ -231,70 +241,80 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
 
   switch (event.eventName) {
     case "TrivialEncrypt":
-      clearText = event.args[0];
-      handle = ethers.toBeHex(event.args[2], 32);
+      clearText = event.args[0 as keyof typeof event.args];
+      handle = hre.ethers.toBeHex(event.args[2 as keyof typeof event.args], 32);
       insertSQL(handle, clearText);
       break;
 
     case "TrivialEncryptBytes":
-      clearText = event.args[0];
-      handle = ethers.toBeHex(event.args[2], 32);
+      clearText = event.args[0 as keyof typeof event.args];
+      handle = hre.ethers.toBeHex(event.args[2 as keyof typeof event.args], 32);
       insertSQL(handle, clearText);
       break;
 
     case "FheAdd":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) + event.args[1];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) + event.args[1 as keyof typeof event.args];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) + BigInt(clearRHS);
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
-      insertSQL(ethers.toBeHex(handle, 32), clearText);
+      insertSQL(hre.ethers.toBeHex(handle, 32), clearText);
       break;
 
     case "FheSub":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) - event.args[1];
-        if (clearText < 0n) clearText = clearText + 2n ** NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) - event.args[1 as keyof typeof event.args];
+        if (clearText < 0n)
+          clearText =
+            clearText + 2n ** NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) - BigInt(clearRHS);
-        if (clearText < 0n) clearText = clearText + 2n ** NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+        if (clearText < 0n)
+          clearText =
+            clearText + 2n ** NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheMul":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) * event.args[1];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) * event.args[1 as keyof typeof event.args];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) * BigInt(clearRHS);
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheDiv":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) / event.args[1];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) / event.args[1 as keyof typeof event.args];
       } else {
         throw new Error("Non-scalar div not implemented yet");
       }
@@ -302,11 +322,11 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       break;
 
     case "FheRem":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) % event.args[1];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) % event.args[1 as keyof typeof event.args];
       } else {
         throw new Error("Non-scalar rem not implemented yet");
       }
@@ -314,279 +334,349 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       break;
 
     case "FheBitAnd":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) & event.args[1];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) & event.args[1 as keyof typeof event.args];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) & BigInt(clearRHS);
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheBitOr":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) | event.args[1];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) | event.args[1 as keyof typeof event.args];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) | BigInt(clearRHS);
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheBitXor":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) ^ event.args[1];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText = BigInt(clearLHS) ^ event.args[1 as keyof typeof event.args];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) ^ BigInt(clearRHS);
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheShl":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) << event.args[1] % NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) <<
+          event.args[1 as keyof typeof event.args] %
+            NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
-        clearText = BigInt(clearLHS) << BigInt(clearRHS) % NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
+        clearText =
+          BigInt(clearLHS) <<
+          BigInt(clearRHS) % NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheShr":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) >> event.args[1] % NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) >>
+          event.args[1 as keyof typeof event.args] %
+            NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
-        clearText = BigInt(clearLHS) >> BigInt(clearRHS) % NumBits[resultType];
-        clearText = clearText % 2n ** NumBits[resultType];
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
+        clearText =
+          BigInt(clearLHS) >>
+          BigInt(clearRHS) % NumBits[resultType as keyof typeof NumBits];
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheRotl":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        shift = event.args[1] % NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        shift =
+          event.args[1 as keyof typeof event.args] %
+          NumBits[resultType as keyof typeof NumBits];
         clearText =
           (BigInt(clearLHS) << shift) |
-          (BigInt(clearLHS) >> (NumBits[resultType] - shift));
-        clearText = clearText % 2n ** NumBits[resultType];
+          (BigInt(clearLHS) >>
+            (NumBits[resultType as keyof typeof NumBits] - shift));
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
-        shift = BigInt(clearRHS) % NumBits[resultType];
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
+        shift = BigInt(clearRHS) % NumBits[resultType as keyof typeof NumBits];
         clearText =
           (BigInt(clearLHS) << shift) |
-          (BigInt(clearLHS) >> (NumBits[resultType] - shift));
-        clearText = clearText % 2n ** NumBits[resultType];
+          (BigInt(clearLHS) >>
+            (NumBits[resultType as keyof typeof NumBits] - shift));
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheRotr":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        shift = event.args[1] % NumBits[resultType];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        shift =
+          event.args[1 as keyof typeof event.args] %
+          NumBits[resultType as keyof typeof NumBits];
         clearText =
           (BigInt(clearLHS) >> shift) |
-          (BigInt(clearLHS) << (NumBits[resultType] - shift));
-        clearText = clearText % 2n ** NumBits[resultType];
+          (BigInt(clearLHS) <<
+            (NumBits[resultType as keyof typeof NumBits] - shift));
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       } else {
-        clearRHS = await getClearText(event.args[1]);
-        shift = BigInt(clearRHS) % NumBits[resultType];
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
+        shift = BigInt(clearRHS) % NumBits[resultType as keyof typeof NumBits];
         clearText =
           (BigInt(clearLHS) >> shift) |
-          (BigInt(clearLHS) << (NumBits[resultType] - shift));
-        clearText = clearText % 2n ** NumBits[resultType];
+          (BigInt(clearLHS) <<
+            (NumBits[resultType as keyof typeof NumBits] - shift));
+        clearText =
+          clearText % 2n ** NumBits[resultType as keyof typeof NumBits];
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheEq":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) === event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) === event.args[1 as keyof typeof event.args]
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) === BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheEqBytes":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) === BigInt(event.args[1]) ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) === BigInt(event.args[1 as keyof typeof event.args])
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) === BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheNe":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) !== event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) !== event.args[1 as keyof typeof event.args]
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) !== BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheNeBytes":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) !== BigInt(event.args[1]) ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) !== BigInt(event.args[1 as keyof typeof event.args])
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) !== BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheGe":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) >= event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) >= event.args[1 as keyof typeof event.args]
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) >= BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheGt":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) > event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) > event.args[1 as keyof typeof event.args] ? 1n : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) > BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheLe":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) <= event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) <= event.args[1 as keyof typeof event.args]
+            ? 1n
+            : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) <= BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheLt":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) < event.args[1] ? 1n : 0n;
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) < event.args[1 as keyof typeof event.args] ? 1n : 0n;
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) < BigInt(clearRHS) ? 1n : 0n;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheMax":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) > event.args[1] ? clearLHS : event.args[1];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) > event.args[1 as keyof typeof event.args]
+            ? clearLHS
+            : event.args[1 as keyof typeof event.args];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) > BigInt(clearRHS) ? clearLHS : clearRHS;
       }
       insertSQL(handle, clearText);
       break;
 
     case "FheMin":
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearLHS = await getClearText(event.args[0]);
-      if (event.args[2] === "0x01") {
-        clearText = BigInt(clearLHS) < event.args[1] ? clearLHS : event.args[1];
+      clearLHS = await getClearText(event.args[0 as keyof typeof event.args]);
+      if (event.args[2 as keyof typeof event.args] === "0x01") {
+        clearText =
+          BigInt(clearLHS) < event.args[1 as keyof typeof event.args]
+            ? clearLHS
+            : event.args[1 as keyof typeof event.args];
       } else {
-        clearRHS = await getClearText(event.args[1]);
+        clearRHS = await getClearText(event.args[1 as keyof typeof event.args]);
         clearText = BigInt(clearLHS) < BigInt(clearRHS) ? clearLHS : clearRHS;
       }
       insertSQL(handle, clearText);
       break;
 
     case "Cast":
-      resultType = parseInt(event.args[1]);
-      handle = ethers.toBeHex(event.args[2], 32);
+      resultType = parseInt(event.args[1 as keyof typeof event.args]);
+      handle = hre.ethers.toBeHex(event.args[2 as keyof typeof event.args], 32);
       clearText =
-        BigInt(await getClearText(event.args[0])) % 2n ** NumBits[resultType];
+        BigInt(await getClearText(event.args[0 as keyof typeof event.args])) %
+        2n ** NumBits[resultType as keyof typeof NumBits];
       insertSQL(handle, clearText);
       break;
 
     case "FheNot":
-      handle = ethers.toBeHex(event.args[1], 32);
+      handle = hre.ethers.toBeHex(event.args[1 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearText = BigInt(await getClearText(event.args[0]));
-      clearText = bitwiseNotUintBits(clearText, Number(NumBits[resultType]));
+      clearText = BigInt(
+        await getClearText(event.args[0 as keyof typeof event.args])
+      );
+      clearText = bitwiseNotUintBits(
+        clearText,
+        Number(NumBits[resultType as keyof typeof NumBits])
+      );
       insertSQL(handle, clearText);
       break;
 
     case "FheNeg":
-      handle = ethers.toBeHex(event.args[1], 32);
+      handle = hre.ethers.toBeHex(event.args[1 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      clearText = BigInt(await getClearText(event.args[0]));
-      clearText = bitwiseNotUintBits(clearText, Number(NumBits[resultType]));
-      clearText = (clearText + 1n) % 2n ** NumBits[resultType];
+      clearText = BigInt(
+        await getClearText(event.args[0 as keyof typeof event.args])
+      );
+      clearText = bitwiseNotUintBits(
+        clearText,
+        Number(NumBits[resultType as keyof typeof NumBits])
+      );
+      clearText =
+        (clearText + 1n) % 2n ** NumBits[resultType as keyof typeof NumBits];
       insertSQL(handle, clearText);
       break;
 
     case "VerifyCiphertext":
-      handle = event.args[0];
+      handle = event.args[0 as keyof typeof event.args];
       try {
         await getClearText(BigInt(handle));
       } catch {
@@ -595,12 +685,18 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
       break;
 
     case "FheIfThenElse": {
-      handle = ethers.toBeHex(event.args[3], 32);
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
       resultType = parseInt(handle.slice(-4, -2), 16);
-      handle = ethers.toBeHex(event.args[3], 32);
-      const clearControl = BigInt(await getClearText(event.args[0]));
-      const clearIfTrue = BigInt(await getClearText(event.args[1]));
-      const clearIfFalse = BigInt(await getClearText(event.args[2]));
+      handle = hre.ethers.toBeHex(event.args[3 as keyof typeof event.args], 32);
+      const clearControl = BigInt(
+        await getClearText(event.args[0 as keyof typeof event.args])
+      );
+      const clearIfTrue = BigInt(
+        await getClearText(event.args[1 as keyof typeof event.args])
+      );
+      const clearIfFalse = BigInt(
+        await getClearText(event.args[2 as keyof typeof event.args])
+      );
       if (clearControl === 1n) {
         clearText = clearIfTrue;
       } else {
@@ -611,17 +707,21 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
     }
 
     case "FheRand":
-      resultType = parseInt(event.args[0], 16);
-      handle = ethers.toBeHex(event.args[1], 32);
-      clearText = getRandomBigInt(Number(NumBits[resultType]));
+      resultType = parseInt(event.args[0 as keyof typeof event.args], 16);
+      handle = hre.ethers.toBeHex(event.args[1 as keyof typeof event.args], 32);
+      clearText = getRandomBigInt(
+        Number(NumBits[resultType as keyof typeof NumBits])
+      );
       insertSQL(handle, clearText, true);
       counterRand++;
       break;
 
     case "FheRandBounded":
-      resultType = parseInt(event.args[1], 16);
-      handle = ethers.toBeHex(event.args[2], 32);
-      clearText = getRandomBigInt(Number(log2(BigInt(event.args[0]))));
+      resultType = parseInt(event.args[1 as keyof typeof event.args], 16);
+      handle = hre.ethers.toBeHex(event.args[2 as keyof typeof event.args], 32);
+      clearText = getRandomBigInt(
+        Number(log2(BigInt(event.args[0 as keyof typeof event.args])))
+      );
       insertSQL(handle, clearText, true);
       counterRand++;
       break;
@@ -629,7 +729,8 @@ async function insertHandleFromEvent(event: FHEVMEvent) {
 }
 
 export function getFHEGasFromTxReceipt(
-  receipt: ethers.TransactionReceipt
+  hre: HardhatRuntimeEnvironment,
+  receipt: TransactionReceipt
 ): number {
   if (hre.network.name !== "hardhat") {
     throw Error("FHEGas tracking is currently implemented only in mocked mode");
@@ -637,8 +738,12 @@ export function getFHEGasFromTxReceipt(
   if (receipt.status === 0) {
     throw new Error("Transaction reverted");
   }
-  const contract = new ethers.Contract(executorAddress, abi, ethers.provider);
-  const relevantLogs = receipt.logs.filter((log: ethers.Log) => {
+  const contract = new hre.ethers.Contract(
+    executorAddress,
+    abi,
+    hre.ethers.provider
+  );
+  const relevantLogs = receipt.logs.filter((log: Log) => {
     if (log.address.toLowerCase() !== executorAddress.toLowerCase()) {
       return false;
     }
@@ -646,7 +751,7 @@ export function getFHEGasFromTxReceipt(
       const parsedLog = contract.interface.parseLog({
         topics: log.topics,
         data: log.data,
-      });
+      })!;
       return abi.some(
         (item) =>
           item.startsWith(`event ${parsedLog.name}`) &&
@@ -656,11 +761,11 @@ export function getFHEGasFromTxReceipt(
       return false;
     }
   });
-  const FHELogs = relevantLogs.map((log: ethers.Log) => {
+  const FHELogs = relevantLogs.map((log: Log) => {
     const parsedLog = contract.interface.parseLog({
       topics: log.topics,
       data: log.data,
-    });
+    })!;
     return {
       name: parsedLog.name,
       args: parsedLog.args,
@@ -672,49 +777,70 @@ export function getFHEGasFromTxReceipt(
     let handle;
     switch (event.name) {
       case "TrivialEncrypt":
-        type = parseInt(event.args[1], 16);
+        type = parseInt(event.args[1 as keyof typeof event.args], 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["trivialEncrypt"].types[type];
         break;
 
       case "TrivialEncryptBytes":
-        type = parseInt(event.args[1], 16);
+        type = parseInt(event.args[1 as keyof typeof event.args], 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["trivialEncrypt"].types[type];
         break;
 
       case "FheAdd":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheAdd"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheAdd"].nonScalar[type];
         }
         break;
 
       case "FheSub":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheSub"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheSub"].nonScalar[type];
         }
         break;
 
       case "FheMul":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMul"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMul"].nonScalar[type];
         }
         break;
 
       case "FheDiv":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheDiv"].scalar[type];
         } else {
           throw new Error("Non-scalar div not implemented yet");
@@ -722,9 +848,13 @@ export function getFHEGasFromTxReceipt(
         break;
 
       case "FheRem":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheRem"].scalar[type];
         } else {
           throw new Error("Non-scalar rem not implemented yet");
@@ -732,206 +862,309 @@ export function getFHEGasFromTxReceipt(
         break;
 
       case "FheBitAnd":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitAnd"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitAnd"].nonScalar[type];
         }
         break;
 
       case "FheBitOr":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitOr"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitOr"].nonScalar[type];
         }
         break;
 
       case "FheBitXor":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitXor"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheBitXor"].nonScalar[type];
         }
         break;
 
       case "FheShl":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
-          FHEGasConsumed += operatorPrices["fheBitShl"].scalar[type];
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
+          FHEGasConsumed += operatorPrices["fheShl"].scalar[type];
         } else {
-          FHEGasConsumed += operatorPrices["fheBitShl"].nonScalar[type];
+          //@ts-ignore
+          FHEGasConsumed += operatorPrices["fheShl"].nonScalar[type];
         }
         break;
 
       case "FheShr":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
-          FHEGasConsumed += operatorPrices["fheBitShr"].scalar[type];
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
+          FHEGasConsumed += operatorPrices["fheShr"].scalar[type];
         } else {
-          FHEGasConsumed += operatorPrices["fheBitShr"].nonScalar[type];
+          //@ts-ignore
+          FHEGasConsumed += operatorPrices["fheShr"].nonScalar[type];
         }
         break;
 
       case "FheRotl":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheRotl"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheRotl"].nonScalar[type];
         }
         break;
 
       case "FheRotr":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheRotr"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheRotr"].nonScalar[type];
         }
         break;
 
       case "FheEq":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheEq"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheEq"].nonScalar[type];
         }
         break;
 
       case "FheEqBytes":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheEq"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheEq"].nonScalar[type];
         }
         break;
 
       case "FheNe":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheNe"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheNe"].nonScalar[type];
         }
         break;
 
       case "FheNeBytes":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheNe"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheNe"].nonScalar[type];
         }
         break;
 
       case "FheGe":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheGe"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheGe"].nonScalar[type];
         }
         break;
 
       case "FheGt":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheGt"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheGt"].nonScalar[type];
         }
         break;
 
       case "FheLe":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheLe"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheLe"].nonScalar[type];
         }
         break;
 
       case "FheLt":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheLt"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheLt"].nonScalar[type];
         }
         break;
 
       case "FheMax":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMax"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMax"].nonScalar[type];
         }
         break;
 
       case "FheMin":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
-        if (event.args[2] === "0x01") {
+        if (event.args[2 as keyof typeof event.args] === "0x01") {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMin"].scalar[type];
         } else {
+          //@ts-ignore
           FHEGasConsumed += operatorPrices["fheMin"].nonScalar[type];
         }
         break;
 
       case "Cast":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["cast"].types[type];
         break;
 
       case "FheNot":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["fheNot"].types[type];
         break;
 
       case "FheNeg":
-        handle = ethers.toBeHex(event.args[0], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[0 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["fheNeg"].types[type];
         break;
 
       case "FheIfThenElse":
-        handle = ethers.toBeHex(event.args[3], 32);
+        handle = hre.ethers.toBeHex(
+          event.args[3 as keyof typeof event.args],
+          32
+        );
         type = parseInt(handle.slice(-4, -2), 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["ifThenElse"].types[type];
         break;
 
       case "FheRand":
-        type = parseInt(event.args[0], 16);
+        type = parseInt(event.args[0 as keyof typeof event.args], 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["fheRand"].types[type];
         break;
 
       case "FheRandBounded":
-        type = parseInt(event.args[1], 16);
+        type = parseInt(event.args[1 as keyof typeof event.args], 16);
+        //@ts-ignore
         FHEGasConsumed += operatorPrices["fheRandBounded"].types[type];
         break;
     }

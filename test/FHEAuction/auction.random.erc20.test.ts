@@ -159,7 +159,7 @@ if (checkEnv()) {
           wonQuantity: 2n,
         },
       ];
-      await ctx.runBlind(bids, expectedUniformPrice);
+      await ctx.runUsingAward(bids, expectedUniformPrice);
     });
 
     it("3 valid bids: p(1) < p(2) < p(3)", async () => {
@@ -344,7 +344,7 @@ if (checkEnv()) {
           wonQuantity: 3n,
         },
       ];
-      await ctx.runBlind(bids, expectedUniformPrice);
+      await ctx.runUsingAward(bids, expectedUniformPrice);
     });
   });
 
@@ -465,7 +465,7 @@ if (checkEnv()) {
           wonQuantity: 0n,
         },
       ];
-      await ctx.runBlind(
+      await ctx.runUsingAward(
         bids,
         expectedUniformPrice,
         expectedBeneficiaryCollect

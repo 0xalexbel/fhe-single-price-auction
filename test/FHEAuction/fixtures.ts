@@ -231,7 +231,7 @@ export async function deployNativeAuctionMockFixture(
     await auction.connect(owner).start(durationSeconds, stoppable);
   }
 
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
   const auctionParams: FHEAuctionParams = {
     tieBreakingRule,
     quantity,
@@ -345,7 +345,7 @@ export async function deployERC20AuctionMockFixture(
     await auction.connect(owner).start(durationSeconds, stoppable);
   }
 
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
   const auctionParams: FHEAuctionParams = {
     tieBreakingRule,
     quantity,
@@ -650,7 +650,7 @@ export async function deployERC20AuctionMockFactoryFixture(
   await auctionToken
     .connect(auctionTokenOwner)
     .transfer(beneficiary, beneficiaryAuctionTokenBalance);
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
 
   return {
     fhevm,
@@ -731,7 +731,7 @@ export async function deployERC20AuctionFactoryFixture(
   await auctionToken
     .connect(auctionTokenOwner)
     .transfer(beneficiary, beneficiaryAuctionTokenBalance);
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
 
   return {
     fhevm,
@@ -786,7 +786,7 @@ export async function deployNativeAuctionMockFactoryFixture(
   await auctionToken
     .connect(auctionTokenOwner)
     .transfer(beneficiary, beneficiaryAuctionTokenBalance);
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
 
   return {
     fhevm,
@@ -838,7 +838,7 @@ export async function deployNativeAuctionFactoryFixture(
   await auctionToken
     .connect(auctionTokenOwner)
     .transfer(beneficiary, beneficiaryAuctionTokenBalance);
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
 
   return {
     fhevm,
@@ -854,6 +854,28 @@ export async function deployNativeAuctionFactoryFixture(
     bob,
     charlie,
     other,
+  };
+}
+
+export async function deployPayementERC20Token(
+  paymentTokenOwner: HardhatEthersSigner,
+  paymentTokenTotalSupply: bigint
+) {
+  const paymentToken: AuctionERC20 = await hre.ethers.deployContract(
+    "PaymentERC20",
+    ["PaymentToken", "PAY"],
+    paymentTokenOwner
+  );
+
+  const paymentTokenAddr = await paymentToken.getAddress();
+
+  await paymentToken
+    .connect(paymentTokenOwner)
+    .mint(paymentTokenOwner, paymentTokenTotalSupply);
+
+  return {
+    paymentToken,
+    paymentTokenAddr,
   };
 }
 
@@ -955,7 +977,7 @@ export async function deployERC20AuctionWithMaxBiddersFixture(
     await auction.connect(owner).start(durationSeconds, stoppable);
   }
 
-  const fhevm = await createInstance();
+  const fhevm = await createInstance(hre);
   const auctionParams: FHEAuctionParams = {
     tieBreakingRule,
     quantity,

@@ -271,7 +271,7 @@ describe("engine.native", () => {
     expect(await ctx.engine.sortProgressMax()).to.equal(1);
 
     await ctx.engine.connect(ctx.owner).allowRankedBids();
-    await awaitCoprocessor();
+    await awaitCoprocessor(hre);
 
     await ctx.expectRankedBidsToEqual(rankedBids);
   });
@@ -528,7 +528,7 @@ describe("engine.native", () => {
     expect(await ctx.auction.canDecryptUniformPrice()).to.be.true;
 
     await ctx.auction.connect(ctx.owner).decryptUniformPrice();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
 
     expect(await ctx.auction.clearUniformPrice()).to.equal(bids[0].price);
     expect(await ctx.auction.connect(alice).canClaim()).to.be.false;
@@ -541,7 +541,7 @@ describe("engine.native", () => {
 
     const aliceAuctionBalanceBefore = await ctx.auctionTokenBalanceOf(alice);
     await ctx.auction.connect(alice).claim();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     const aliceAuctionBalanceAfter = await ctx.auctionTokenBalanceOf(alice);
     expect(aliceAuctionBalanceAfter - aliceAuctionBalanceBefore).to.equal(
       bids[0].quantity
@@ -549,7 +549,7 @@ describe("engine.native", () => {
 
     const bobAuctionBalanceBefore = await ctx.auctionTokenBalanceOf(bob);
     await ctx.auction.connect(bob).claim();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
     const bobAuctionBalanceAfter = await ctx.auctionTokenBalanceOf(bob);
     expect(bobAuctionBalanceAfter - bobAuctionBalanceBefore).to.equal(
       bids[1].quantity
@@ -580,7 +580,7 @@ describe("engine.native", () => {
     await ctx.computeWonQuantitiesByRank();
 
     await ctx.auction.connect(ctx.owner).decryptUniformPrice();
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
 
     expect(await ctx.auction.clearUniformPrice()).to.equal(bids[0].price);
 
@@ -596,7 +596,7 @@ describe("engine.native", () => {
     const bobAuctionBalanceBefore = await ctx.auctionTokenBalanceOf(bob);
     const bobPaymentBalanceBefore = await ctx.paymentTokenBalanceOf(bob);
 
-    await awaitAllDecryptionResults();
+    await awaitAllDecryptionResults(hre);
 
     const aliceAuctionBalanceAfter = await ctx.auctionTokenBalanceOf(alice);
     const bobAuctionBalanceAfter = await ctx.auctionTokenBalanceOf(bob);
@@ -676,7 +676,7 @@ describe("engine.native", () => {
     // gas = 13331 (begin) + 56550 (end) + 32507 (loop init) + k*152680
     // gas = 102388 + k*152680
     //await ctx.engine.computeWonQuantitiesByRank(5n);
-    //awaitCoprocessor();
+    //awaitCoprocessor(hre);
     //32507+13331+56550
 
     // const uniformPrice = await ctx.getClearUniformPrice();

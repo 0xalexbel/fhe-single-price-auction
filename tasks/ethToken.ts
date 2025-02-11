@@ -1,4 +1,4 @@
-import { task, scope } from "hardhat/config";
+import { scope } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
