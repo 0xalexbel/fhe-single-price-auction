@@ -36,6 +36,8 @@ npx hardhat --network sepolia deploy --tags AuctionFactories --report-gas
 ```bash
 # Displays the list of auction related commands
 npx hardhat auction --help
+# Displays the auction command options
+npx hardhat auction <command name> --help
 ```
 
 ```bash
@@ -57,7 +59,8 @@ npx hardhat eth --help
 - `auction stop` : stops a existing auction, and make ready to compute
 - `auction compute` : execute chunck-by-chunck computing iterations
 - `auction decrypt-uniform-price` : decrypts the computed uniform price
-- `auction award` or `auction claim` : to distribute prizes
+- `auction award` : distribute prizes using a push mechanism (uses less computation)
+- `auction claim` : distribute prizes using a pull mechanism (uses much more computation)
 
 ## ERC20 Commands
 
@@ -72,6 +75,14 @@ npx hardhat eth --help
 - `eth set-min-balance` : sets the ETH balance of an account to a minimum amount
 
 # Algorithm
+
+## Performances
+
+- The algorithm has a **computational complexity of O(N²)**, where **N** represents the number of bidders. The **push approach**, combined with a **chunk-by-chunk computation mechanism**, allows the auction to theoretically handle **up to 20 bidders**, requiring approximately **420 computing cycles** and resulting in **around 100 computing EVM transactions**. This approach is viable if the **auction prize is significant** (e.g., **Treasury bonds**).
+
+- To better reflect a **real-world scenario**, the current version uses **`euint256`** as the primary type for **price** and **quantity**. However, the code can be **easily adapted** to use **smaller data types** such as **`euint64`**, which would greatly enhance **FHE gas performance**.
+
+## Architecture and description
 
 For more information about the architecture and the algorithm, see [contracts/engines/FHEAuctionEngine.sol](https://github.com/0xalexbel/fhe-single-price-auction/blob/14c7121b1dee13cbef8224a096d9ded8a45aaaa2/contracts/engines/FHEAuctionEngine.sol) contract commentary.
 
