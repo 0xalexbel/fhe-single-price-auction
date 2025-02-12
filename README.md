@@ -33,15 +33,43 @@ npx hardhat --network sepolia deploy --tags AuctionFactories --report-gas
 
 # Major Commands
 
+```bash
+# Displays the list of auction related commands
+npx hardhat auction --help
+```
+
+```bash
+# Displays the list of ERC20 Token related commands
+npx hardhat erc20 --help
+```
+
+```bash
+# Displays the list of ETH Token related commands
+npx hardhat eth --help
+```
+
+## Auction Commands
+
 - `auction create` : creates a new auction
 - `auction start` : starts a existing auction, and make ready to accept bids
 - `auction bid` : place a new bid
+- `auction cancel-bid` : cancels a bid (when the auction is open)
 - `auction stop` : stops a existing auction, and make ready to compute
 - `auction compute` : execute chunck-by-chunck computing iterations
 - `auction decrypt-uniform-price` : decrypts the computed uniform price
 - `auction award` or `auction claim` : to distribute prizes
 
-Use `eth` and `erc20` sub commands to manage tokens
+## ERC20 Commands
+
+- `erc20 balance` : prints the balance of an account
+- `erc20 transfer` : executes an erc20 transfer transaction
+- `erc20 set-balance` : sets the balance of an account to a specified amount
+
+## ETH Commands
+
+- `eth balance` : prints the ETH balance of an account
+- `eth transfer` : executes an ETH transfer transaction
+- `eth set-min-balance` : sets the ETH balance of an account to a minimum amount
 
 # Algorithm
 
