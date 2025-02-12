@@ -20,6 +20,17 @@ npx hardhad node
 npx hardhat --network localhost test --grep "sepolia.tasks.priceid.erc20"
 ```
 
+# Deploy on Sepolia
+
+```bash
+# Gas : 612_056
+npx hardhat --network sepolia deploy --tags PaymentERC20 --report-gas
+# Gas : 612_056
+npx hardhat --network sepolia deploy --tags AuctionERC20 --report-gas
+# Gas: 23_715_561
+npx hardhat --network sepolia deploy --tags AuctionFactories --report-gas
+```
+
 # Major Commands
 
 - `auction create` : creates a new auction
@@ -53,7 +64,7 @@ Three tokens are involved in the following test.
 
 ### Step 1: Wallets ETH balance setup
 
-The wallets of Alice, Bob, Carol and David must be topped up with at least 1.0 ETH to proceed.
+For convenience, the wallets of Alice, Bob, Carol and David are topped up with 1.0 ETH.
 
 ```bash
 # Set Alice=1 balance to 1.0 ETH
@@ -69,25 +80,38 @@ npx hardhat --network sepolia eth set-min-balance --min 1000000000000000000 --ac
 ### Step 2: Wallets AUC (AuctionERC20) balance setup
 
 ```bash
-# Set Alice=1 balance to 1000000 AUC (1000000 is the future quantity of token put up for auction)
-npx hardhat --network sepolia erc20 transfer --token auction --to 1 --amount 1000000
+# Set Alice=1 balance to 1000000 AUC (1000000 is the future quantity of token put up for auction) (Gas: 51_556)
+npx hardhat --network sepolia erc20 set-balance --token auction --to 1 --amount 1000000
+```
+
+It is preferrable to reset the AUC token balances.
+
+```bash
+# Set Bob=2 balance to 0 PAY
+npx hardhat --network sepolia erc20 set-balance --token payment --account 2 --amount 0
+# Set Carol=3 balance to 0 PAY
+npx hardhat --network sepolia erc20 set-balance --token payment --account 3 --amount 0
+# Set David=4 balance to 0 PAY
+npx hardhat --network sepolia erc20 set-balance --token payment --account 4 --amount 0
 ```
 
 ### Step 3: Wallets PAY (PaymentERC20) balance setup
 
 ```bash
-# Set Bob=2 balance to 100000000000000000 AUC (price * quantity = 200000000000 * 500000)
-npx hardhat --network sepolia erc20 transfer --token payment --to 2 --price 200000000000 --quantity 500000
-# Set Carol=3 balance to 480000000000000000 AUC (price * quantity = 800000000000 * 600000)
-npx hardhat --network sepolia erc20 transfer --token payment --to 3 --price 800000000000 --quantity 600000
-# Set David=4 balance to 1000000000000 AUC (price * quantity = 1000000 * 1000000)
-npx hardhat --network sepolia erc20 transfer --token payment --to 4 --price 1000000 --quantity 1000000
+# Set Aice=1 balance to 0 PAY
+npx hardhat --network sepolia erc20 set-balance --token payment --account 1 --amount 0
+# Set Bob=2 balance to 100000000000000000 PAY (price * quantity = 200000000000 * 500000)
+npx hardhat --network sepolia erc20 set-balance --token payment --account 2 --price 200000000000 --quantity 500000
+# Set Carol=3 balance to 480000000000000000 PAY (price * quantity = 800000000000 * 600000)
+npx hardhat --network sepolia erc20 set-balance --token payment --account 3 --price 800000000000 --quantity 600000
+# Set David=4 balance to 1000000000000 PAY (price * quantity = 1000000 * 1000000)
+npx hardhat --network sepolia erc20 set-balance --token payment --account 4 --price 1000000 --quantity 1000000
 ```
 
 ### Step 4: Create a new auction
 
 ```bash
-# Gas used : 7_485_470
+# Gas used : 7_505_721
 # Alice = beneficiary = 1, Quantity = 1000000 (previously transfered to Alice's wallet)
 npx hardhat --network sepolia auction create --type erc20 --beneficiary 1 --salt MyFHEAuction1 --quantity 1000000 --minimum-payment-deposit 1000000 --payment-penalty 500 --max-bid-count 3
 ```
@@ -95,7 +119,7 @@ npx hardhat --network sepolia auction create --type erc20 --beneficiary 1 --salt
 Output:
 
 ```bash
-🚀 New ERC20 auction at address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B has been successfully created.
+🚀 New ERC20 auction at address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 has been successfully created.
 ```
 
 ### Step 5: Start the new auction
@@ -106,9 +130,9 @@ Output:
 - The `start` command will automatically retreive the auction's owner wallet in order to run the command.
 
 ```bash
-# Gas used : 7_485_470
+# Gas used : 121_362
 # Alice = beneficiary = 1, Quantity = 1000000 (previously transfered to Alice's wallet)
-npx hardhat --network sepolia auction start --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --duration 100000
+npx hardhat --network sepolia auction start --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --duration 100000
 ```
 
 You can also use the `--salt` argument to specify the auction. The command bellow is equivalent to the command above.
@@ -116,7 +140,7 @@ You can also use the `--salt` argument to specify the auction. The command bello
 ```bash
 # Gas:
 # Token Approval : 46_342
-# Auction Start  : 121_384
+# Auction Start  : 121_362
 # Alice = beneficiary = 1, Quantity = 1000000 (previously transfered to Alice's wallet)
 npx hardhat --network sepolia auction start --type erc20 --beneficiary 1 --salt MyFHEAuction1 --duration 100000
 ```
@@ -124,19 +148,18 @@ npx hardhat --network sepolia auction start --type erc20 --beneficiary 1 --salt 
 ### Place bids
 
 ```bash
-# Bob = 2, price = 200_000_000_000, quantity = 500_000 (Gas used: Bid=1_051_919)
-npx hardhat --network sepolia auction bid --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 2 --price 200000000000 --quantity 500000
-# Carol = 3, price = 800_000_000_000, quantity = 600_000 (Gas used: Approve=46_378, Deposit=64_623, Bid=997_795)
-npx hardhat --network sepolia auction bid --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 3 --price 800000000000 --quantity 600000
-# Gas used: Approve=46_354, Deposit=64_599, Bid=997_831
-# David = 4, price = 1_000_000, quantity = 1_000_000 (Gas used: Approve=46_354, Deposit=64_599, Bid=997_831)
-npx hardhat --network sepolia auction bid --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --bidder 4 --price 1000000 --quantity 1000000
+# Bob = 2, price = 200_000_000_000, quantity = 500_000 (Gas used: Approve=46_378, Deposit=81_658, Bid=1_007_802)
+npx hardhat --network sepolia auction bid --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --bidder 2 --price 200000000000 --quantity 500000
+# Carol = 3, price = 800_000_000_000, quantity = 600_000 (Gas used: Approve=46_378, Deposit=64_558, Bid=997_809)
+npx hardhat --network sepolia auction bid --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --bidder 3 --price 800000000000 --quantity 600000
+# David = 4, price = 1_000_000, quantity = 1_000_000 (Gas used: Approve=46_354, Deposit=64_534, Bid=997_785)
+npx hardhat --network sepolia auction bid --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --bidder 4 --price 1000000 --quantity 1000000
 ```
 
 Sepolia Tx:
-Bob's bid Tx: 0x65331cc98fa8934b6a8f22240a2452e8c2596e608966960bbd5390d4fbef7777
-Carol's bid Tx: 0x97552ae33689b0f49343e2356c46e13f1ad0a43ac6463b67200b36478fe97f2f
-David's bid Tx: 0x66dfd2aa632b1bb1f932e20a3e23171cfee490459297254856496a4a31d56689
+Bob's bid Tx: 0xb186ed3b3ff4a2422545cffc1a66965b839597cbc180dc55ea2dcd5e14bd2b2b
+Carol's bid Tx: 0xd1ce7d14a0ba9240127d2a2e6c504f3b3f546825bc987a8ba0a5861ba024c26d
+David's bid Tx: 0x29337a1dff59e3362bcc77e7da6ae4d76c00aa156ab69c04f1425e1abfab69bd
 
 > [!WARNING]  
 > The bid command requires the encryption of the price and quantity values. Sometimes the following error is raised :
@@ -147,10 +170,10 @@ David's bid Tx: 0x66dfd2aa632b1bb1f932e20a3e23171cfee490459297254856496a4a31d566
 
 ```bash
 # Gas used 177_147
-npx hardhat --network sepolia auction stop --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+npx hardhat --network sepolia auction stop --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360
 ```
 
-Sepolia Tx: 0xe45135c09812e22ba02486ad0b84d1d73594d4c44e40a0311e3a2852ee411805
+Sepolia Tx: 0x2abd044b21bf1226e3e97c8dbd4eade4ac484863d137026af26072527d011c20
 
 ### Step 7: Compute the auction
 
@@ -160,48 +183,48 @@ Sepolia Tx: 0xe45135c09812e22ba02486ad0b84d1d73594d4c44e40a0311e3a2852ee411805
 In this example, 12 iterations are required to fully compute the auction prizes in blind mode (the most cost effective approach).
 
 ```bash
-# Gas used: 447_959 (Tx: 0xee168db9edcb349c383d8cebd224c077f2dc4b1bc125ddf5fad11dab679a9e15)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --award
-# Gas used: 271_758 (Tx: 0xc3a439779bc36f87199d2323e3d1d4630060179aeef0cdfa07d7e7c166441f41)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --award
-# Gas used: 498_195 (Tx: 0xbb53638f49821792afbf37e03ba13c648cf1b16c33f99f1d61c4d2a3a237ef65)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --award
-# Gas used: 450_512 (Tx: 0x64bc1d14650c1ec10607c99dcf241c69778b533d3e7985d9b74d5b6df49f7336)
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 2 --gas-limit 2000000 --award
-# Gas used: 508_647 (Tx: 0xdde23766d2e2c05bce43d019097fbdef555341ca3e5074418c5095679b0e2221) Progress=91%
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 3 --gas-limit 2000000 --award
-# Gas used: 433_290 (Tx: 0x5ddf738bcd05f3a7c6cbdc9fe5003016edffeb7fd5b7f508498a2c9b8ea65078) Progress=100%
-npx hardhat --network sepolia auction compute --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --count 2 --worker 4 --gas-limit 2000000 --award
+# Gas used: 448_737 (Tx: 0xe1d50e6b1b4ef0b06269b282e8f0fdd4b0303f60587ae38d8720e1c79f9f5cb4)
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 2 --gas-limit 2000000 --award
+# Gas used: 664_620 (Tx: 0xb0317fc3d60fe8e53fa4ad4325268fe436241bae08c268ff193dca6859a3ffeb) Progress=41%
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 3 --gas-limit 2000000 --award
+# Gas used: 453_261 (Tx: 0x5a7ae63025b81f560a32dae5187f34d612be1e07175b54d9d466bd95ed0d0503) Progress=58%
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 4 --gas-limit 2000000 --award
+# Gas used: 441_890 (Tx: 0x69b3bab8a38709ea565cbbf75a9a3d14c052b07b9905d204db7a8efd029839fc) Progress=75%
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 2 --gas-limit 2000000 --award
+# Gas used: 508_583 (Tx: 0x15f84bcd5850fce2bbff1687923ee54ff40f8af64e9a478fc8d8270e1025b3f6) Progress=91%
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 3 --gas-limit 2000000 --award
+# Gas used: 433_226 (Tx: 0x3574cf53cf21fc65ac94eef2bb8b4b1f99b8b4544bd3992c6f275ccc9144addd) Progress=100%
+npx hardhat --network sepolia auction compute --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --count 2 --worker 4 --gas-limit 2000000 --award
 ```
 
 ### Step 8: Decrypt uniform prize
 
 ```bash
-# Gas used: 190_939
-npx hardhat --network sepolia auction decrypt-uniform-price --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+# Gas used: 188_783 (Tx:0xe560f25d96675ff8906f78751bc3d1d36256f47130fa9c9da8c3a8b239c0f22b)
+npx hardhat --network sepolia auction decrypt-uniform-price --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360
 ```
 
 To check if the uniform price has been decrypted:
 
 ```bash
-npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+npx hardhat --network sepolia auction claim-info --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360
 ```
 
-### Step 9: Blind Claim prizes
+### Step 9: Award prizes (Push)
 
 ```bash
-# Bob runs the 'award' transaction for rank 0
-npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 0 --worker 2
-# Carol runs the 'award' transaction for rank 1
-npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 1 --worker 3
-# David runs the 'award' transaction for rank 2
-npx hardhat --network sepolia auction award --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B --rank 2 --worker 4
+# Bob runs the 'award' transaction for rank 0 (Gas used: 302_975, Tx: 0x4a7e56cdf5916d3373aeac4ffeec76f61a1436fd1261a833d58822b566dcd8cd)
+npx hardhat --network sepolia auction award --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --rank 0 --worker 2
+# Carol runs the 'award' transaction for rank 1 (Gas used: 322_887, Tx: 0xe6774f01c4153f123f1d4ae911ffa23f81eea76619f57a40ea691b95952a6351)
+npx hardhat --network sepolia auction award --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --rank 1 --worker 3
+# David runs the 'award' transaction for rank 2 (Gas used: 322_887, Tx: 0xe07a668d9a5d072eaa23956f10ec1d68b7a0a908d1d13d66a69da62836efd47b)
+npx hardhat --network sepolia auction award --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360 --rank 2 --worker 4
 ```
 
-To check blind claim progress:
+To check prize award progress:
 
 ```bash
-npx hardhat --network sepolia auction claim-info --address 0xBb007ACDd6d18be638bC0B58be2a7a6C12b4639B
+npx hardhat --network sepolia auction claim-info --address 0xa47DB400d1691fb5BEAa1B49104138a8c22c8360
 ```
 
 ### Step 10: Prizes verification

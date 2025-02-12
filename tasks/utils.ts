@@ -712,13 +712,13 @@ export async function canBidOrThrow(
   const statusCode = await auction.base.statusCode();
   if (statusCode >= BigInt("0x7")) {
     throw new FHEAuctionError(
-      `Cannot place bid because auction ${auction.address} is closed.`
+      `Cannot place/cancel bid because auction ${auction.address} is closed.`
     );
   }
 
   if (statusCode < BigInt("0x3")) {
     throw new FHEAuctionError(
-      `Cannot place bid because auction ${auction.address} is not open. Run 'auction start' before.`
+      `Cannot place/cancel bid because auction ${auction.address} is not open. Run 'auction start' before.`
     );
   }
 

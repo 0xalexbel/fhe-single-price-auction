@@ -9,8 +9,12 @@ import {
   TASK_ALLOWANCE,
   TASK_APPROVE,
   TASK_BALANCE,
+  TASK_SET_BALANCE,
+  TASK_SET_MIN_BALANCE,
   TASK_TRANSFER,
 } from "./task-names";
+import assert from "assert";
+import { FHEAuctionError } from "./error";
 
 const erc20Scope = scope("erc20", "ERC20 related commands");
 
@@ -272,5 +276,146 @@ erc20Scope
     console.info("Approve tx hash: ", receipt!.hash);
     console.info(
       `Approve erc20 tokens ${tokenAddr} owner: ${ownerAddr} spender: ${spenderAddr} amount: ${taskArguments.amount}`
+    );
+  });
+
+////////////////////////////////////////////////////////////////////////////////
+// Set min balance
+////////////////////////////////////////////////////////////////////////////////
+
+erc20Scope
+  .task(TASK_SET_BALANCE, "Sets the specified account balance to a given value")
+  .addParam("token", "'payment', 'auction' or a token address")
+  .addParam("account", "account address or index")
+  .addOptionalParam(
+    "amount",
+    "Amount of erc20 tokens to transfer",
+    undefined,
+    types.bigint
+  )
+  .addOptionalParam(
+    "price",
+    "Bid price (amount = price * quantity)",
+    undefined,
+    types.bigint
+  )
+  .addOptionalParam(
+    "quantity",
+    "Bid quantity (amount = price * quantity)",
+    undefined,
+    types.bigint
+  )
+  .addFlag("dryRun")
+  .setAction(async function (
+    taskArguments: TaskArguments,
+    hre: HardhatRuntimeEnvironment
+  ) {
+    const { deployer } = await hre.getNamedAccounts();
+
+    const tokenAddr = await convertToToken(hre, taskArguments.token);
+    if (!tokenAddr) {
+      console.error(`Unable to resolve token address`);
+      return;
+    }
+
+    const erc20Meta: IERC20Metadata = await hre.ethers.getContractAt(
+      "IERC20Metadata",
+      tokenAddr
+    );
+    const sym = await erc20Meta.symbol();
+
+    const _price = taskArguments.price;
+    const _quantity = taskArguments.quantity;
+    const _amount = taskArguments.amount;
+
+    let amount;
+    if (_amount !== undefined) {
+      amount = _amount;
+    } else if (_price !== undefined && _quantity !== undefined) {
+      amount = _price * _quantity;
+    } else {
+      console.error(`Unable to compute amount`);
+      return;
+    }
+
+    const accountAddr = await convertToAddress(hre, taskArguments.account);
+    if (!accountAddr) {
+      console.error(
+        `'${taskArguments.account}' not an address or a signer index`
+      );
+      return;
+    }
+
+    const erc20: IERC20 = await hre.ethers.getContractAt("IERC20", tokenAddr);
+
+    const b = await erc20.balanceOf(accountAddr);
+
+    if (b === amount) {
+      console.info(
+        `👍 No ERC20 to transfer. Balance : ${b} ${sym} (account: ${accountAddr})`
+      );
+      return;
+    }
+
+    let senderSigner: HardhatEthersSigner;
+    let toAddr;
+    let diff;
+
+    if (b < amount) {
+      senderSigner = await HardhatEthersSigner.create(
+        hre.ethers.provider,
+        deployer
+      );
+      toAddr = accountAddr;
+      diff = amount - b;
+    } else {
+      senderSigner = await HardhatEthersSigner.create(
+        hre.ethers.provider,
+        accountAddr
+      );
+      toAddr = deployer;
+      diff = b - amount;
+    }
+
+    const receiverBalance = await erc20.balanceOf(toAddr);
+    const senderBalance = await erc20.balanceOf(senderSigner.address);
+
+    if (senderBalance < diff) {
+      console.info(`sender balance : ${senderBalance} ${sym}`);
+      console.info(`amount         : ${diff} ${sym}`);
+      console.error(`Not enough founds!`);
+      return;
+    }
+
+    if (receiverBalance + diff === amount) {
+      assert(toAddr === accountAddr);
+    } else if (senderBalance - diff === amount) {
+      assert(toAddr === deployer);
+    } else {
+      throw new FHEAuctionError("Internal error");
+    }
+
+    if (taskArguments.dryRun) {
+      console.info(`token address         : ${tokenAddr}`);
+      console.info(`sender address        : ${senderSigner.address}`);
+      console.info(`receiver address      : ${toAddr}`);
+      console.info(`receiver balance      : ${receiverBalance} ${sym}`);
+      console.info(`receiver new balance  : ${receiverBalance + diff} ${sym}`);
+      console.info(`amount to send        : ${diff} ${sym}`);
+      console.info(`sender balance        : ${senderBalance} ${sym}`);
+      console.info(`sender new balance    : ${senderBalance - diff} ${sym}`);
+      return;
+    }
+
+    const tx = await erc20.connect(senderSigner).transfer(toAddr, diff);
+    const receipt = await tx.wait(1);
+
+    logGas(hre, receipt, "Transfer");
+
+    const newFromBalance = await erc20.balanceOf(senderSigner.address);
+    const newToBalance = await erc20.balanceOf(toAddr);
+
+    console.info(
+      `ERC20 Balance : ${newToBalance} ${sym} (account: ${toAddr}), ${newFromBalance} ${sym} (account: ${senderSigner.address})`
     );
   });

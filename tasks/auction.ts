@@ -14,7 +14,6 @@ import {
   depositOrThrow,
   FHEAuctionResolution,
   logGas,
-  parseAllEvents,
   parseComputeEvents,
   resolveAuctionOrThrow,
   resolveAuctionSigners,
@@ -27,13 +26,13 @@ import {
   SCOPE_AUCTION_TASK_BID,
   SCOPE_AUCTION_TASK_BLIND_CLAIM,
   SCOPE_AUCTION_TASK_CANBID,
+  SCOPE_AUCTION_TASK_CANCEL_BID,
   SCOPE_AUCTION_TASK_CLAIM,
   SCOPE_AUCTION_TASK_CLAIM_INFO,
   SCOPE_AUCTION_TASK_COMPUTE,
   SCOPE_AUCTION_TASK_DECRYPT_UNIFORM_PRICE,
   SCOPE_AUCTION_TASK_INFO,
 } from "./task-names";
-import { FHEAuctionEngine } from "../types";
 import { awaitAllDecryptionResults } from "../test/asyncDecrypt";
 
 const auctionScope = scope("auction", "Auction related commands");
@@ -259,7 +258,7 @@ declareAuctionTask(
     const tx = await auction.base.connect(signers.owner).stop();
     const receipt = await tx.wait(1);
 
-    const totalFee = logGas(hre, receipt, "Auction start");
+    const totalFee = logGas(hre, receipt, "Auction stop");
 
     const eth = hre.ethers.formatUnits(totalFee, "ether");
 
@@ -390,6 +389,39 @@ declareAuctionTask(
         "ether"
       )} ETH`
     );
+  }
+);
+
+////////////////////////////////////////////////////////////////////////////////
+// Cancel bid
+////////////////////////////////////////////////////////////////////////////////
+
+declareAuctionTask(
+  auctionScope
+    .task(SCOPE_AUCTION_TASK_CANCEL_BID, "Cancel the bidder's bid")
+    .addParam("bidder", "Bidder address"),
+  async function (
+    auction: FHEAuctionResolution,
+    taskArguments: TaskArguments,
+    hre: HardhatRuntimeEnvironment
+  ) {
+    const res = await canBidOrThrow(hre, auction, false, taskArguments.bidder);
+
+    const tx = await auction.base.connect(res.bidder.signer).cancelBid();
+    const receipt = await tx.wait(1);
+
+    logGas(hre, receipt, "Cancel bid");
+
+    if (await auction.base.connect(res.bidder.signer).registered()) {
+      console.error(
+        `Bid cancel transaction succeeded, but bidder is still registered.`
+      );
+    } else {
+    }
+
+    console.info(`Auction address           : ${auction.address}`);
+    console.info(`Bidder address            : ${res.bidder.address}`);
+    console.info(`✅ Bid was successfully cancelled.`);
   }
 );
 

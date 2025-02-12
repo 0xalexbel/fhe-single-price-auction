@@ -15,6 +15,7 @@ import {
   SCOPE_ERC20,
   SCOPE_ETH,
   TASK_BALANCE,
+  TASK_SET_BALANCE,
   TASK_SET_MIN_BALANCE,
   TASK_TRANSFER,
 } from "../../tasks/task-names";
@@ -64,6 +65,16 @@ if (checkEnv()) {
     });
 
     async function getTokenBalances(token: string, auctionAddress?: string) {
+      const aliceBalance = await hre.run(
+        {
+          scope: SCOPE_ERC20,
+          task: TASK_BALANCE,
+        },
+        {
+          account: alice,
+          token,
+        }
+      );
       const bobBalance = await hre.run(
         {
           scope: SCOPE_ERC20,
@@ -108,12 +119,61 @@ if (checkEnv()) {
         : undefined;
 
       return {
+        alice: aliceBalance,
         bob: bobBalance,
         carol: carolBalance,
         david: davidBalance,
         auction: auctionBalance,
       };
     }
+
+    ////////////////////////////////////////////////////////////////////////////
+
+    async function checkBalances(
+      startPaymentBalances: any,
+      startAuctionBalances: any,
+      auctionAddr: string
+    ) {
+      const endAuctionBalances = await getTokenBalances("auction", auctionAddr);
+      const endPaymentBalances = await getTokenBalances("payment", auctionAddr);
+
+      expect(
+        startPaymentBalances.alice +
+          bids.bob.wonQuantity * expectedUniformPrice +
+          bids.carol.wonQuantity * expectedUniformPrice +
+          bids.david.wonQuantity * expectedUniformPrice
+      ).to.equal(endPaymentBalances.alice);
+      expect(
+        startPaymentBalances.bob - bids.bob.wonQuantity * expectedUniformPrice
+      ).to.equal(endPaymentBalances.bob);
+      expect(
+        startPaymentBalances.carol -
+          bids.carol.wonQuantity * expectedUniformPrice
+      ).to.equal(endPaymentBalances.carol);
+      expect(
+        startPaymentBalances.david -
+          bids.david.wonQuantity * expectedUniformPrice
+      ).to.equal(endPaymentBalances.david);
+
+      expect(endAuctionBalances.bob - startAuctionBalances.bob).to.equal(
+        bids.bob.wonQuantity
+      );
+      expect(endAuctionBalances.carol - startAuctionBalances.carol).to.equal(
+        bids.carol.wonQuantity
+      );
+      expect(endAuctionBalances.david - startAuctionBalances.david).to.equal(
+        bids.david.wonQuantity
+      );
+      expect(endAuctionBalances.auction).to.equal(0);
+      expect(endAuctionBalances.alice).to.equal(
+        startAuctionBalances.alice -
+          (bids.bob.wonQuantity +
+            bids.carol.wonQuantity +
+            bids.david.wonQuantity)
+      );
+    }
+
+    ////////////////////////////////////////////////////////////////////////////
 
     it("Test award scripts", async () => {
       for (let i = 1; i <= 4; ++i) {
@@ -123,40 +183,54 @@ if (checkEnv()) {
         );
       }
 
+      // Set Alice's auction balance to Quantity
       await hre.run(
-        { scope: SCOPE_ERC20, task: TASK_TRANSFER },
-        { token: "auction", to: alice, amount: quantity.toString() }
+        { scope: SCOPE_ERC20, task: TASK_SET_BALANCE },
+        { token: "auction", account: alice, amount: quantity }
+      );
+
+      // Set Alice's payment balance to Zero
+      await hre.run(
+        { scope: SCOPE_ERC20, task: TASK_SET_BALANCE },
+        {
+          token: "payment",
+          account: alice,
+          amount: 0n,
+        }
       );
 
       await hre.run(
-        { scope: SCOPE_ERC20, task: TASK_TRANSFER },
+        { scope: SCOPE_ERC20, task: TASK_SET_BALANCE },
         {
           token: "payment",
-          to: bob,
-          price: bids.bob.price.toString(),
+          account: bob,
+          price: bids.bob.price,
           quantity: bids.bob.quantity,
         }
       );
 
       await hre.run(
-        { scope: SCOPE_ERC20, task: TASK_TRANSFER },
+        { scope: SCOPE_ERC20, task: TASK_SET_BALANCE },
         {
           token: "payment",
-          to: carol,
-          price: bids.carol.price.toString(),
+          account: carol,
+          price: bids.carol.price,
           quantity: bids.carol.quantity,
         }
       );
 
       await hre.run(
-        { scope: SCOPE_ERC20, task: TASK_TRANSFER },
+        { scope: SCOPE_ERC20, task: TASK_SET_BALANCE },
         {
           token: "payment",
-          to: david,
-          price: bids.david.price.toString(),
+          account: david,
+          price: bids.david.price,
           quantity: bids.david.quantity,
         }
       );
+
+      const startPaymentTokenBalances = await getTokenBalances("payment");
+      const startAuctionTokenBalances = await getTokenBalances("auction");
 
       // Create
       const auctionAddr = await hre.run(
@@ -290,11 +364,6 @@ if (checkEnv()) {
 
       // 'award' command can be executed by any account.
 
-      const auctionTokenBalancesBefore = await getTokenBalances(
-        "auction",
-        auctionAddr
-      );
-
       // Award first prize
       await hre.run(
         {
@@ -349,22 +418,14 @@ if (checkEnv()) {
 
       expect(infos.totalClaimsCompleted).to.equal(3);
 
-      const auctionTokenBalancesAfter = await getTokenBalances(
-        "auction",
+      await checkBalances(
+        startPaymentTokenBalances,
+        startAuctionTokenBalances,
         auctionAddr
       );
-
-      expect(
-        auctionTokenBalancesAfter.bob - auctionTokenBalancesBefore.bob
-      ).to.equal(bids.bob.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.carol - auctionTokenBalancesBefore.carol
-      ).to.equal(bids.carol.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.david - auctionTokenBalancesBefore.david
-      ).to.equal(bids.david.wonQuantity);
-      expect(auctionTokenBalancesAfter.auction).to.equal(0);
     });
+
+    ////////////////////////////////////////////////////////////////////////////
 
     it("Test blindClaim scripts (Experimental)", async () => {
       for (let i = 1; i <= 4; ++i) {
@@ -408,6 +469,9 @@ if (checkEnv()) {
           quantity: bids.david.quantity,
         }
       );
+
+      const startPaymentTokenBalances = await getTokenBalances("payment");
+      const startAuctionTokenBalances = await getTokenBalances("auction");
 
       // Create
       const auctionAddr = await hre.run(
@@ -541,11 +605,6 @@ if (checkEnv()) {
 
       // 'blindClaim' command can be executed by any account.
 
-      const auctionTokenBalancesBefore = await getTokenBalances(
-        "auction",
-        auctionAddr
-      );
-
       await hre.run(
         {
           scope: SCOPE_AUCTION,
@@ -594,22 +653,14 @@ if (checkEnv()) {
 
       expect(infos.totalClaimsCompleted).to.equal(3);
 
-      const auctionTokenBalancesAfter = await getTokenBalances(
-        "auction",
+      await checkBalances(
+        startPaymentTokenBalances,
+        startAuctionTokenBalances,
         auctionAddr
       );
-
-      expect(
-        auctionTokenBalancesAfter.bob - auctionTokenBalancesBefore.bob
-      ).to.equal(bids.bob.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.carol - auctionTokenBalancesBefore.carol
-      ).to.equal(bids.carol.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.david - auctionTokenBalancesBefore.david
-      ).to.equal(bids.david.wonQuantity);
-      expect(auctionTokenBalancesAfter.auction).to.equal(0);
     });
+
+    ////////////////////////////////////////////////////////////////////////////
 
     it("Test claim scripts", async () => {
       for (let i = 1; i <= 4; ++i) {
@@ -653,6 +704,9 @@ if (checkEnv()) {
           quantity: bids.david.quantity,
         }
       );
+
+      const startPaymentTokenBalances = await getTokenBalances("payment");
+      const startAuctionTokenBalances = await getTokenBalances("auction");
 
       // Create
       const auctionAddr = await hre.run(
@@ -788,11 +842,6 @@ if (checkEnv()) {
 
       // 'claim' command can only be executed by the bidder.
 
-      const auctionTokenBalancesBefore = await getTokenBalances(
-        "auction",
-        auctionAddr
-      );
-
       // Bob claims its prize
       await hre.run(
         {
@@ -805,6 +854,8 @@ if (checkEnv()) {
         }
       );
 
+      await awaitAllDecryptionResults(hre);
+
       // Carol claims its prize
       await hre.run(
         {
@@ -816,6 +867,8 @@ if (checkEnv()) {
           bidder: carol,
         }
       );
+
+      await awaitAllDecryptionResults(hre);
 
       // David claims its prize
       await hre.run(
@@ -844,21 +897,11 @@ if (checkEnv()) {
 
       expect(infos.totalClaimsCompleted).to.equal(3);
 
-      const auctionTokenBalancesAfter = await getTokenBalances(
-        "auction",
+      await checkBalances(
+        startPaymentTokenBalances,
+        startAuctionTokenBalances,
         auctionAddr
       );
-
-      expect(
-        auctionTokenBalancesAfter.bob - auctionTokenBalancesBefore.bob
-      ).to.equal(bids.bob.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.carol - auctionTokenBalancesBefore.carol
-      ).to.equal(bids.carol.wonQuantity);
-      expect(
-        auctionTokenBalancesAfter.david - auctionTokenBalancesBefore.david
-      ).to.equal(bids.david.wonQuantity);
-      expect(auctionTokenBalancesAfter.auction).to.equal(0);
     });
   });
 }

@@ -4,15 +4,21 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 
 import { HardhatEthersSigner } from "@nomicfoundation/hardhat-ethers/signers";
 import { convertToAddress, toWei } from "./utils";
+import {
+  SCOPE_ETH,
+  TASK_BALANCE,
+  TASK_SET_MIN_BALANCE,
+  TASK_TRANSFER,
+} from "./task-names";
 
-const ethScope = scope("eth", "ETH token related commands");
+const ethScope = scope(SCOPE_ETH, "ETH token related commands");
 
 /**
  * npx hardhat eth transfer --amount 10 --to-index 2
  */
 ethScope
   .task(
-    "transfer",
+    TASK_TRANSFER,
     "Transfers ETH from the deployer address to a specified signer index"
   )
   .addParam("amount", "Amount of eth to transfer")
@@ -85,7 +91,7 @@ ethScope
 
 ethScope
   .task(
-    "balance",
+    TASK_BALANCE,
     "Prints the ETH balance of a specified account or signer index"
   )
   .addParam("account", "account address or index")
@@ -107,7 +113,7 @@ ethScope
 
 ethScope
   .task(
-    "set-min-balance",
+    TASK_SET_MIN_BALANCE,
     "Sets the specified account balance to a minimum value"
   )
   .addParam("account", "account address or index")
